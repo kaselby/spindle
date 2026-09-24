@@ -1,0 +1,11 @@
+{
+  "name": "spindle",
+  "owner": { "name": "Spindle" },
+  "plugins": [
+    {
+      "name": "spindle",
+      "source": "./",
+      "description": "Threads: track ongoing work on disk so a new session can pick it up"
+    }
+  ]
+}

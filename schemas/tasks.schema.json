@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threads/tasks.schema.json",
+  "title": "tasks.yml — the thread's todo list",
+  "$comment": "A task has no state beyond open or done, and no claims: work that needs either becomes a subthread. The file may be edited by hand. The tool keeps a hash of the file as it last saw it, and on the next command diffs any hand edits into task-added, task-closed, task-edited or task-removed events. A hand-added task without an id gets one then, which is the only time the tool rewrites the file on its own. A promoted task stays on the list with `promoted` set.",
+  "type": "object",
+  "required": ["tasks"],
+  "additionalProperties": false,
+  "properties": {
+    "tasks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/task" }
+    }
+  },
+  "$defs": {
+    "task": {
+      "type": "object",
+      "required": ["text"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Short id assigned by the tool; absent only on a hand-added task the tool hasn't seen yet.",
+          "type": "string",
+          "pattern": "^t[a-z0-9]{4}$"
+        },
+        "text": {
+          "description": "The task, one line.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "done": {
+          "description": "The only state a task has. Default false.",
+          "type": "boolean",
+          "default": false
+        },
+        "promoted": {
+          "description": "Id of the subthread this task became. `view` shows it as a pointer to that thread; the subthread's progress is tracked there, not here.",
+          "$ref": "common.schema.json#/$defs/threadId"
+        }
+      }
+    }
+  }
+}

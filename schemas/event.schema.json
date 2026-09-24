@@ -1,0 +1,367 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threads/event.schema.json",
+  "title": "log.jsonl — one event (one line)",
+  "$comment": "One line of log.jsonl. The log is the only way a thread changes; thread.yml and index.md are folds over it. Every event has the same envelope (id, ts, by, type, payload), and the set of types is closed.",
+  "type": "object",
+  "required": ["id", "ts", "by", "type"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "$ref": "common.schema.json#/$defs/eventId" },
+    "ts": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "by": { "$ref": "common.schema.json#/$defs/identity" },
+    "type": {
+      "type": "string",
+      "enum": [
+        "created",
+        "claim",
+        "release",
+        "checkpoint",
+        "note",
+        "task-added",
+        "task-closed",
+        "task-removed",
+        "task-edited",
+        "child-created",
+        "child-merged",
+        "register",
+        "state-changed",
+        "origin-revised",
+        "origin-replaced",
+        "linked",
+        "unlinked",
+        "merged-into",
+        "child-closed",
+        "child-dropped",
+        "child-reopened",
+        "child-superseded",
+        "child-adopted",
+        "reparented",
+        "reopened"
+      ]
+    },
+    "payload": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "created" } } },
+      "then": {
+        "description": "First event of every thread. Folder laid out, origin.md written.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["title"],
+          "properties": {
+            "title": { "type": "string" },
+            "parent": { "$ref": "common.schema.json#/$defs/threadId" },
+            "supersedes": { "description": "Legacy: supersede was retired; never written now.", "$ref": "common.schema.json#/$defs/threadId" },
+            "namespace": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$" }
+          }
+        } },
+        "required": ["payload"]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "claim" } } },
+      "then": {
+        "description": "Presence, not ownership: several sessions can claim a thread. Liveness is derived from the session's last event on the thread.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "intent": { "description": "Optional. One line shown in the presence banner, so another session knows what this one is doing.", "type": "string", "minLength": 1, "maxLength": 160 }
+          }
+        } }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "release" } } },
+      "then": {
+        "description": "The session stops working on the thread; its claim goes away.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "skipped-checkpoint": { "description": "Reason given to --skip, if the release bypassed a due checkpoint.", "type": "string" },
+            "session": { "description": "Session released by doctor when it differs from the event author.", "type": "string" },
+            "expired": { "type": "boolean" },
+            "unsynced-events": { "type": "integer", "minimum": 0 }
+          }
+        } }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "checkpoint" } } },
+      "then": {
+        "description": "`at` is the latest event the author had read; the append succeeds only if it is still the latest. The body lives in checkpoints/<checkpoint>.md.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["checkpoint", "at", "headline"],
+          "properties": {
+            "checkpoint": { "description": "Checkpoint file id.", "type": "string" },
+            "at": { "$ref": "common.schema.json#/$defs/eventId" },
+            "headline": { "description": "Duplicated from the file's frontmatter so the arc renders from the log alone. Same cap.", "type": "string", "maxLength": 120 },
+            "registers": { "description": "Registrations made in this checkpoint. Reserved; the tool records registrations as `register` events.", "type": "array", "items": { "$ref": "common.schema.json#/$defs/registration" } }
+          }
+        } },
+        "required": ["payload"]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "note" } } },
+      "then": {
+        "description": "A finding. Never shown by `view`; searchable with `replay`. Uncapped.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["text"],
+          "properties": {
+            "text": { "type": "string", "minLength": 1 },
+            "tags": { "type": "array", "items": { "type": "string" } }
+          }
+        } },
+        "required": ["payload"]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "enum": ["task-added", "task-closed", "task-removed", "task-edited"] } } },
+      "then": {
+        "description": "Written when tasks.yml changes, through a command or through a hand edit the tool diffs on its next command. `task-edited` covers hand edits that change a task's text.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["task"],
+          "properties": {
+            "task": { "type": "string" },
+            "text": { "type": "string" },
+            "hand-edit": { "description": "True when detected by diff rather than issued by a command.", "type": "boolean" },
+            "promoted": { "$ref": "common.schema.json#/$defs/threadId" },
+            "from": { "description": "Thread this task was rolled up from at merge.", "$ref": "common.schema.json#/$defs/threadId" }
+          }
+        } },
+        "required": ["payload"]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "child-created" } } },
+      "then": {
+        "description": "On the PARENT. A subthread started, directly or by promoting a task. The parent's view of its children is derived from these.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["child", "title"],
+          "properties": {
+            "child": { "$ref": "common.schema.json#/$defs/threadId" },
+            "title": { "type": "string" },
+            "from-task": { "type": "string" }
+          }
+        } },
+        "required": ["payload"]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "child-merged" } } },
+      "then": {
+        "description": "On the PARENT, one per merge. The child's log isn't replayed: the parent gets this event plus a forced checkpoint. It carries the child's final checkpoint (the merge report), what was copied, what stayed behind as a pointer, and which tasks rolled up.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["child", "checkpoint"],
+          "properties": {
+            "child": { "$ref": "common.schema.json#/$defs/threadId" },
+            "checkpoint": { "description": "The child's final checkpoint id — the merge report.", "type": "string", "pattern": "^c[0-9]{4}$" },
+            "headline": { "description": "The child's final checkpoint headline, copied so the parent's view can show it without opening the child.", "type": "string", "maxLength": 120 },
+            "promoted": { "description": "Paths copied child→parent.", "type": "array", "items": { "$ref": "common.schema.json#/$defs/relPath" } },
+            "pointers": { "description": "Registered child items left in the child and pointed at from the parent's index.", "type": "array", "items": { "$ref": "common.schema.json#/$defs/relPath" } },
+            "tasks": { "description": "Ids the rolled-up tasks were given on the parent's board.", "type": "array", "items": { "type": "string" } },
+            "forced": { "description": "True when --force reparented the child's own open children.", "type": "boolean" }
+          }
+        } },
+        "required": ["payload"]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "register" } } },
+      "then": {
+        "description": "A doc or artifact registered on the thread. index.md is the fold over these.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["registration", "checkpoint"],
+          "properties": {
+            "registration": { "$ref": "common.schema.json#/$defs/registration" },
+            "checkpoint": { "type": "string" },
+            "from": { "description": "For a copy made at merge: the `<thread>@<cid>` it came from.", "type": "string", "pattern": "^[a-z0-9]{6,12}@c[0-9]{4}$" },
+            "pointer": { "description": "An item left in another thread: `<thread>:<path>@<cid>`. Nothing is copied; the index shows it as a pointer.", "type": "string", "pattern": "^[a-z0-9]{6,12}:(docs|artifacts)/[^/].*@c[0-9]{4}$" }
+          }
+        } },
+        "required": ["payload"]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "state-changed" } } },
+      "then": {
+        "description": "A thread state transition. The doctor writes active→inactive for threads untouched for a while; the tool writes inactive→active before any other event on an inactive thread.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["from", "to"],
+          "properties": {
+            "from": { "$ref": "common.schema.json#/$defs/loggedThreadState" },
+            "to": { "$ref": "common.schema.json#/$defs/loggedThreadState" },
+            "reason": { "description": "Free text. The doctor gives its reason for shelving; the tool writes reopened. Older logs may also carry merged, closed or superseded, which the fold uses to tell a legacy merge from a legacy close.", "type": "string" },
+            "successor": { "description": "Legacy supersede pointer; never written now.", "$ref": "common.schema.json#/$defs/threadId" },
+            "superseded-by": { "description": "Legacy supersede pointer; never written now.", "$ref": "common.schema.json#/$defs/threadId" }
+          }
+        } },
+        "required": ["payload"]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "origin-replaced" } } },
+      "then": {
+        "description": "The origin was replaced in place after a clean checkpoint; the prior file remains beside it.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["previous", "after-checkpoint"],
+          "properties": {
+            "previous": { "type": "string", "pattern": "^origin-[1-9][0-9]*\\.md$" },
+            "after-checkpoint": { "type": "string", "pattern": "^c[0-9]{4}$" },
+            "title": { "type": "string", "minLength": 1, "maxLength": 80 }
+          }
+        } },
+        "required": ["payload"]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "origin-revised" } } },
+      "then": {
+        "description": "A dated revision section was appended under the origin's '## Revisions'.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["revision"],
+          "properties": {
+            "revision": { "description": "Ordinal of the appended section.", "type": "integer", "minimum": 1 }
+          }
+        } },
+        "required": ["payload"]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "enum": ["linked", "unlinked"] } } },
+      "then": {
+        "description": "Add or remove a one-sided thread relationship.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["kind", "target"],
+          "properties": {
+            "kind": { "enum": ["related", "blocked-by", "continues"] },
+            "target": { "$ref": "common.schema.json#/$defs/threadId" }
+          }
+        } },
+        "required": ["payload"]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "merged-into" } } },
+      "then": {
+        "description": "On the CHILD. Records the merge, so the child's content and log stay as they were.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["parent", "checkpoint"],
+          "properties": {
+            "parent": { "$ref": "common.schema.json#/$defs/threadId" },
+            "checkpoint": { "description": "The parent's merge checkpoint, known in advance (next ordinal).", "type": "string", "pattern": "^c[0-9]{4}$" }
+          }
+        } },
+        "required": ["payload"]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "child-closed" } } },
+      "then": {
+        "description": "On the PARENT. Legacy, read but never written: a child closed without merging. The fold reads it as the child completing.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["child"],
+          "properties": {
+            "child": { "$ref": "common.schema.json#/$defs/threadId" },
+            "checkpoint": { "description": "The child's final checkpoint.", "type": "string", "pattern": "^c[0-9]{4}$" }
+          }
+        } },
+        "required": ["payload"]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "child-dropped" } } },
+      "then": {
+        "description": "On the PARENT. A child was dropped (not worth pursuing). A normal ending: shown on the parent's view page and never a doctor finding.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["child"],
+          "properties": {
+            "child": { "$ref": "common.schema.json#/$defs/threadId" },
+            "checkpoint": { "description": "The child's final checkpoint.", "type": "string", "pattern": "^c[0-9]{4}$" }
+          }
+        } },
+        "required": ["payload"]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "child-reopened" } } },
+      "then": {
+        "description": "On the PARENT. A finished child was reopened.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["child"],
+          "properties": { "child": { "$ref": "common.schema.json#/$defs/threadId" } }
+        } },
+        "required": ["payload"]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "child-superseded" } } },
+      "then": {
+        "description": "Legacy parent event from the retired supersede command; never written now.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["child", "successor"],
+          "properties": {
+            "child": { "$ref": "common.schema.json#/$defs/threadId" },
+            "successor": { "$ref": "common.schema.json#/$defs/threadId" }
+          }
+        } },
+        "required": ["payload"]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "child-adopted" } } },
+      "then": {
+        "description": "On the NEW PARENT, paired with `reparented` on the moved thread. The fold treats it like `child-created`.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["child", "title"],
+          "properties": {
+            "child": { "$ref": "common.schema.json#/$defs/threadId" },
+            "title": { "type": "string" },
+            "from": { "description": "The parent it was moved away from.", "$ref": "common.schema.json#/$defs/threadId" }
+          }
+        } },
+        "required": ["payload"]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "reparented" } } },
+      "then": {
+        "description": "On the MOVED thread. Overrides origin.md's `parent` in the fold. No folder moves, since subthreads live flat beside their parents.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["from", "to"],
+          "properties": {
+            "from": { "$ref": "common.schema.json#/$defs/threadId" },
+            "to": { "$ref": "common.schema.json#/$defs/threadId" }
+          }
+        } },
+        "required": ["payload"]
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "reopened" } } },
+      "then": {
+        "description": "On the thread being reopened, immediately before its state-changed from a final state (completed, dropped, merged) to active.",
+        "properties": { "payload": { "type": "object", "additionalProperties": false, "properties": {} } }
+      }
+    }
+  ]
+}

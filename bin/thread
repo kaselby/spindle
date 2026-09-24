@@ -1,0 +1,9 @@
+#!/bin/sh
+# The `thread` CLI, run from this plugin's own tree through uv.
+# Harness plugins put this directory on PATH, so skills can say plain `thread`.
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+if ! command -v uv >/dev/null 2>&1; then
+  echo "thread: Spindle needs uv (https://docs.astral.sh/uv/). Install it with: curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+  exit 127
+fi
+exec uv run --quiet --frozen --no-dev --project "$root" thread "$@"

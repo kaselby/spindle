@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threads/checkpoint.schema.json",
+  "title": "checkpoints/<id>.md — YAML frontmatter",
+  "$comment": "Frontmatter of a checkpoint file; the body is markdown. A checkpoint is a synthesis written against the origin: the latest one is where the thread stands, and all of them in order are its history. The body is an outline whose first line is the headline, then '## Status' and optionally '## Inherited' (at most 3 one-line items, each tagged with the checkpoint it came from). Size limits on the body are checked by the tool, since JSON Schema can't see markdown; `inherited` is mirrored here so it can be checked and rendered without parsing the body. A checkpoint can't record the hash of its own commit; `git log --grep 'checkpoint <id>@<cid>'` finds it.",
+  "type": "object",
+  "required": ["id", "thread", "at", "ts", "by", "headline"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "description": "Per-thread ordinal: c0001, c0002, ...",
+      "type": "string",
+      "pattern": "^c[0-9]{4}$"
+    },
+    "thread": { "$ref": "common.schema.json#/$defs/threadId" },
+    "at": {
+      "description": "The latest event id the author had read. The write succeeds only if it is still the latest; events after it are 'since the last checkpoint'.",
+      "$ref": "common.schema.json#/$defs/eventId"
+    },
+    "ts": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "by": { "$ref": "common.schema.json#/$defs/identity" },
+    "headline": {
+      "description": "One line for the thread's history. The cap is enforced at write time.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "inherited": {
+      "description": "Mirror of the body's '## Inherited' section, written by the tool: at most 3 one-line items, each tagged with the checkpoint it came from.",
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["since", "text"],
+        "additionalProperties": false,
+        "properties": {
+          "since": { "description": "Checkpoint id where this item first appeared.", "type": "string", "pattern": "^c[0-9]{4}$" },
+          "text": { "type": "string", "minLength": 1, "maxLength": 160 }
+        }
+      }
+    },
+    "registers": {
+      "description": "Docs/artifacts registered in this checkpoint.",
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/registration" }
+    },
+    "forced-by": {
+      "description": "Set when a structural moment required the checkpoint rather than the author choosing it. `close` appears only in older logs.",
+      "type": "string",
+      "enum": ["merge", "pivot", "complete", "drop", "close", "reanchor"]
+    },
+    "project-head": {
+      "description": "HEAD of the project containing the threads root, when that parent is a Git repository.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{40,64}$"
+    }
+  }
+}

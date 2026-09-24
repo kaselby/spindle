@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threads/common.schema.json",
+  "title": "Shared definitions for thread on-disk formats",
+  "$comment": "Definitions shared by the other schemas.",
+  "$defs": {
+    "threadId": {
+      "description": "Random short id with no timestamp in it. Ids are unique per store. The slug is separate and only for humans.",
+      "type": "string",
+      "pattern": "^[a-z0-9]{6,12}$"
+    },
+    "slug": {
+      "description": "Human-readable handle, derived from the title at creation, not unique, never used for resolution.",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "maxLength": 60
+    },
+    "eventId": {
+      "description": "Sortable timestamp plus four random characters, e.g. 20260918T131501-7kmq.",
+      "type": "string",
+      "pattern": "^[0-9]{8}T[0-9]{6}-[23456789abcdefghjkmnpqrstuvwxyz]{4}$"
+    },
+    "timestamp": {
+      "description": "RFC 3339 with offset.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "identity": {
+      "description": "Who did something. The session id is always required; an agent id is optional, for hosts that have one.",
+      "type": "object",
+      "required": ["session"],
+      "additionalProperties": false,
+      "properties": {
+        "session": {
+          "description": "The session id (THREAD_SESSION, set by the harness plugin). Opaque to Spindle. Required.",
+          "type": "string",
+          "minLength": 1
+        },
+        "agent": {
+          "description": "Optional agent id (THREAD_AGENT), for hosts where a named agent runs many sessions.",
+          "type": "string",
+          "minLength": 1
+        },
+        "host": {
+          "description": "Which host adapter produced the identity (pi, claude-code, …). Optional; diagnostic only.",
+          "type": "string"
+        }
+      }
+    },
+    "threadState": {
+      "description": "active and inactive are live states. inactive means untouched for a while: the doctor sets it, and any later activity makes the thread active again. merged (a subthread folded into its parent), completed (a top-level thread whose work is done) and dropped (not worth pursuing) are final. Archiving is a location (threads/archived/YYYY-MM/), not a state.",
+      "type": "string",
+      "enum": ["active", "inactive", "merged", "completed", "dropped"]
+    },
+    "loggedThreadState": {
+      "description": "A state as written in a log: the current names, plus the older `open`, `closed` and `superseded`. The fold reads open as active, closed as completed (merged when the reason is `merged`), and superseded as dropped.",
+      "anyOf": [
+        { "$ref": "#/$defs/threadState" },
+        { "enum": ["open", "closed", "superseded"] }
+      ]
+    },
+    "relPath": {
+      "description": "Path relative to the thread folder, forward slashes.",
+      "type": "string",
+      "pattern": "^(docs|artifacts)/[^/].*$"
+    },
+    "registration": {
+      "description": "A doc or artifact listed on the thread's view page. Docs are orientation guides meant to steer future work; artifacts are records. Docs also need read-when.",
+      "type": "object",
+      "required": ["path", "kind", "purpose"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "$ref": "#/$defs/relPath" },
+        "kind": {
+          "description": "What kind of file it is. guide, runbook and reading-order are doc kinds; the rest are artifact kinds.",
+          "type": "string",
+          "enum": ["guide", "runbook", "reading-order", "report", "experiment", "dataset", "weights", "diagram", "script", "harness", "presentation", "other"]
+        },
+        "purpose": {
+          "description": "One line: what this is for. Capped so the index stays one line per entry.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "read-when": {
+          "description": "Docs only: when a future agent should read this before acting. Required for paths under docs/.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "supersedes": {
+          "description": "Path of an earlier registration this one replaces. Reserved; the current tool doesn't write it.",
+          "$ref": "#/$defs/relPath"
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "path": { "pattern": "^docs/" } } },
+          "then": { "required": ["read-when"] }
+        }
+      ]
+    }
+  }
+}

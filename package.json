@@ -1,0 +1,18 @@
+{
+  "name": "spindle",
+  "version": "0.1.0",
+  "description": "Threads: track ongoing work on disk so a new session can pick it up",
+  "private": true,
+  "type": "module",
+  "keywords": [
+    "pi-package"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions/pi.ts"
+    ],
+    "skills": [
+      "./skills"
+    ]
+  }
+}

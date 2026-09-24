@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "threads/origin.schema.json",
+  "title": "origin.md — YAML frontmatter",
+  "$comment": "Frontmatter of origin.md. The body is the creator's words and is never capped or summarized. Its sections are '## Context & Motivation' (required and non-empty; the tool checks this at creation), then optionally '## Scope', '## Constraints' and '## Completion criteria'. The original body is never rewritten: `revise` appends dated sections under '## Revisions', and `reanchor` keeps the earlier origin as origin-N.md and replaces this file.",
+  "type": "object",
+  "required": ["thread", "title", "created", "by"],
+  "additionalProperties": false,
+  "properties": {
+    "thread": { "$ref": "common.schema.json#/$defs/threadId" },
+    "title": {
+      "description": "Human title; the slug is derived from it. One line.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "created": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "by": { "$ref": "common.schema.json#/$defs/identity" },
+    "parent": {
+      "description": "Set on subthreads. A subthread's origin covers its own work and may mention the parent for context.",
+      "$ref": "common.schema.json#/$defs/threadId"
+    },
+    "from-task": {
+      "description": "Set when the thread was promoted from a task on the parent's list.",
+      "type": "string"
+    },
+    "previous": {
+      "description": "The immediately preceding origin retained beside origin.md after reanchor.",
+      "type": "string",
+      "pattern": "^origin-[1-9][0-9]*\\.md$"
+    },
+    "supersedes": {
+      "description": "Legacy pointer from the retired supersede command; never written now.",
+      "$ref": "common.schema.json#/$defs/threadId"
+    },
+    "namespace": {
+      "description": "Optional label for keeping threads apart, e.g. per agent. Absent means the default namespace. Ids stay unique across the whole store. A thread lives at <ns>/threads/<id>-<slug>/ (archived: <ns>/threads/archived/YYYY-MM/<id>-<slug>/), and this field must agree with the folder.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$"
+    },
+    "project": {
+      "description": "Opaque tag. Projects aren't a primitive yet.",
+      "type": "string"
+    }
+  }
+}

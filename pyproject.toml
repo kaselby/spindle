@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "spindle"
+version = "0.1.0"
+description = "Spindle: harness-agnostic memory for agents"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["pyyaml>=6"]
+
+[project.scripts]
+thread = "spindle.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "jsonschema>=4", "referencing>=0.36"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/spindle"]
