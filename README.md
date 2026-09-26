@@ -4,6 +4,32 @@ Harness-agnostic memory for agents: threads track ongoing work so a fresh sessio
 
 Requires git and [uv](https://docs.astral.sh/uv/).
 
+## Install
+
+Claude Code:
+
+```
+claude plugin marketplace add kaselby/spindle
+claude plugin install spindle@spindle
+```
+
+pi:
+
+```
+pi install git:github.com/kaselby/spindle
+```
+
+oh-my-pi:
+
+```
+omp plugin install github:kaselby/spindle
+```
+
+Then start a new session and ask the agent to set up Spindle. It asks whether threads should be
+stored globally or per project, and installs Spindle's standing instructions, which take effect
+from the next session.
+
+
 The repository is the plugin: each harness installs a copy of the whole tree.
 
 - `src/spindle/`: the `thread` CLI, and the startup snapshot (`python -m spindle.context`) the hooks inject
