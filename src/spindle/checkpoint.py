@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from . import events, gitops, guide
+from . import metadata as thread_metadata
 from .limits import LIMITS
 from .store import NeedsInput, ThreadError, atomic_text, markdown, strip_comments
 
@@ -350,6 +351,9 @@ def create(
         metadata["inherited"] = parsed["inherited"]
     if forced_by:
         metadata["forced-by"] = forced_by
+    # thread.yml as it stands now: the baseline the view page diffs against
+    # to say which metadata changed since this checkpoint.
+    metadata["metadata"] = thread_metadata.read(thread)
     source = parsed["source"]
     if merged:
         source = _merge_source(source, merged[0], parsed["from"], merged[1])

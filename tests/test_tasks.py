@@ -6,7 +6,7 @@ import json
 
 import yaml
 
-from spindle import events, store
+from spindle import events, metadata, store
 
 
 def _board(path):
@@ -98,11 +98,13 @@ def test_promote_creates_a_subthread_and_marks_the_task(root, make_thread, run, 
     child_id = json.loads(result.out)["id"]
     child = store.resolve_thread(root, child_id)
 
-    # D2: children are flat under active/, parentage lives in the log and the fold.
+    # D2: children are flat under threads/; parentage and the task it came
+    # from live in the child's thread.yml, not in its origin.
     assert child.parent.name == "threads"
-    assert yaml.safe_load((child / "thread.yml").read_text(encoding="utf-8"))["parent"] == identifier
-    metadata, _ = store.parse_frontmatter((child / "origin.md").read_text(encoding="utf-8"))
-    assert metadata["parent"] == identifier and metadata["from-task"] == task["id"]
+    values = metadata.read(child)
+    assert values["parent"] == identifier and values["from-task"] == task["id"]
+    front, _ = store.parse_frontmatter((child / "origin.md").read_text(encoding="utf-8"))
+    assert "parent" not in front and "from-task" not in front
 
     created = [event for event in events.read_events(parent) if event["type"] == "child-created"]
     assert created[0]["payload"] == {

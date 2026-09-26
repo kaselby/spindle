@@ -40,6 +40,20 @@ session or so. What happened (the log) grows constantly. In a single file,
 the fast-changing material buries the slow. Each gets its own place, with
 its own rules.
 
+**Metadata is a file you edit; the log is what happened.** What a thread
+*is* (its title, its parent, flags other tools set) lives in
+thread.yml, and people and agents edit it directly. What *happened* lives in
+the log, append-only. What *state* the thread is in (active or ended, who's
+working, how much is unsynced, its subthreads) is computed from the log
+whenever it's read and never stored, so there is no copy to drift. The origin
+is narrative only. An earlier design made the log the only way anything
+changes, with thread.yml a cache rebuilt from it. Its main benefit,
+conflict-free sync of one store across machines, doesn't apply, because
+threads aren't synced between computers, and a single metadata file that you
+edit when you need to is simpler. What the log gave up is a record of hand edits;
+the view recovers the part that matters by diffing thread.yml against the
+copy each checkpoint keeps.
+
 **Every reason is anchored to one fixed point.** The origin is never
 rewritten. Checkpoints are written against the origin, not against the
 previous checkpoint, so a distortion in one checkpoint isn't carried into
@@ -82,6 +96,8 @@ and `doctor` for whoever arrives next.
 | **Inherited** (max 3) | silent loss, and pile-up | Keeps a critical warning from being dropped between checkpoints, capped because the earlier equivalent grew forever. |
 | **Log** | lost information, bloat | Everything is kept, and nothing in it is shown by default. |
 | **Notes** in the log | bloat | A place for findings that doesn't compete with the checkpoint. In the earlier system, notes on the orientation path had swallowed the real state. |
+| **thread.yml** | a second copy of the truth | The one place metadata lives, edited directly and checked on every read. State is computed, never stored beside it. |
+| **Reading guide** (max 1,500 characters) | slow orientation | Hand-written pointers and a reading order, including things outside the thread that registration can't point at. Capped and checked, because a guide that grows is status moving to the wrong place. |
 | **Docs with a read-when** | lost knowledge | Knowledge every future session needs, placed on the view page with when to read it. That turns "remember to read the notes" into a listed pointer. |
 | **Subthreads** | tasks carrying hidden reasoning | Work big enough to need its own reasoning gets its own origin and checkpoints, instead of stuffing that reasoning into a task's one line. |
 | **Merge writes the parent's checkpoint** | parents going stale | The moment a child finishes is the one moment someone is sure to be thinking about the parent. |

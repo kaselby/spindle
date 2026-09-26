@@ -3,12 +3,24 @@
     "SessionStart": [
       {
         "matcher": "startup|clear",
-        "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/claude-code.sh SessionStart" }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/claude-code.sh SessionStart",
+            "timeout": 15
+          }
+        ]
       }
     ],
     "SubagentStart": [
       {
-        "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/claude-code.sh SubagentStart" }]
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/claude-code.sh SubagentStart",
+            "timeout": 15
+          }
+        ]
       }
     ]
   }

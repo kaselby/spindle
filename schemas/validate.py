@@ -24,13 +24,27 @@ ident = {"session": "tr-abc123", "agent": "worker"}
 E1, E2, E3, E4, E5, E6, E7 = (f"20260911T1110{n:02d}-7kmq" for n in range(1, 8))
 cases = {
  "origin.schema.json": [
-  ({"thread":"k7q2m9xa","title":"Thread schemas","created":TS,"by":ident}, True),
-  ({"thread":"k7q2m9xa","created":TS,"by":ident}, False)],
+  ({"thread":"k7q2m9xa","created":TS,"by":ident}, True),
+  ({"thread":"k7q2m9xa","created":TS,"by":ident,"previous":"origin-1.md"}, True),
+  # Metadata moved to thread.yml; an unmigrated origin fails.
+  ({"thread":"k7q2m9xa","title":"Thread schemas","created":TS,"by":ident}, False),
+  ({"created":TS,"by":ident}, False)],
  "tasks.schema.json": [
   ({"tasks":[{"id":"t9k2a","text":"write schemas","done":False},{"text":"hand-added"}]}, True),
   ({"tasks":[{"id":"bad","text":"x"}]}, False)],
  "event.schema.json": [
   ({"id":E1,"ts":TS,"by":ident,"type":"created","payload":{"title":"x"}}, True),
+  ({"id":E1,"ts":TS,"by":ident,"type":"created","payload":{"title":"x","parent":"m3n4p5","from-task":"t9k2a","flags":{"kiln.autonomous":True},"namespace":"research"}}, True),
+  ({"id":E1,"ts":TS,"by":ident,"type":"created","payload":{"title":"x","flags":{"k":[1]}}}, False),
+  ({"id":E1,"ts":TS,"by":ident,"type":"migrated","payload":{"metadata":{"title":"x","parent":"m3n4p5"}}}, True),
+  ({"id":E1,"ts":TS,"by":ident,"type":"migrated","payload":{"metadata":{"parent":"m3n4p5"}}}, False),
+  ({"id":E1,"ts":TS,"by":ident,"type":"migrated","payload":{}}, False),
+  # Register kind: doc|artifact, matching the folder; the retired kinds stay readable.
+  ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"pending","registration":{"path":"docs/a.md","kind":"doc","purpose":"p","read-when":"r"}}}, True),
+  ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"pending","registration":{"path":"artifacts/a.csv","kind":"artifact","purpose":"p"}}}, True),
+  ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"pending","registration":{"path":"artifacts/a.csv","kind":"doc","purpose":"p"}}}, False),
+  ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"pending","registration":{"path":"docs/a.md","kind":"artifact","purpose":"p","read-when":"r"}}}, False),
+  ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"pending","registration":{"path":"docs/a.md","kind":"notes","purpose":"p","read-when":"r"}}}, False),
   ({"id":E2,"ts":TS,"by":ident,"type":"claim","payload":{"intent":"drafting"}}, True),
   ({"id":E2,"ts":TS,"by":ident,"type":"claim"}, True),
   ({"id":E7,"ts":TS,"by":ident,"type":"state-changed","payload":{"from":"inactive","to":"open"}}, True),
@@ -79,20 +93,26 @@ cases = {
   ({"id":"c0005","thread":"k7q2m9xa","at":E4,"ts":TS,"by":ident,"headline":"h","inherited":[{"since":"c0002","text":"x"}]*3}, True),
   ({"id":"c0005","thread":"k7q2m9xa","at":E4,"ts":TS,"by":ident,"headline":"h","inherited":[{"since":"c0002","text":"x"}]*4}, False),
   # The checkpoint no longer carries the sha of its own commit.
-  ({"id":"c0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"headline":"h","commit":"a"*40}, False)],
+  ({"id":"c0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"headline":"h","commit":"a"*40}, False),
+  # The metadata baseline for the view's "thread.yml since the last checkpoint" line.
+  ({"id":"c0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"headline":"h","metadata":{"title":"T","flags":{"a":1}}}, True),
+  ({"id":"c0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"headline":"h","metadata":{"tittle":"T"}}, False)],
  "thread.schema.json": [
+  ({"title":"Thread schemas"}, True),
+  ({"title":"T","parent":"m3n4p5","from-task":"t9k2a","supersedes":"k7q2m9xa",
+    "flags":{"kiln.autonomous":True,"priority":2,"owner":"alice","due":None}}, True),
+  ({"title":"T","parent":None}, True),
+  ({"parent":"m3n4p5"}, False),
+  ({"title":""}, False),
+  ({"title":"t"*81}, False),
+  ({"tittle":"T"}, False),
+  # `project` is no longer a key.
+  ({"title":"T","project":"spindle"}, False),
+  ({"title":"T","parent":"Not An Id"}, False),
+  ({"title":"T","flags":{"tags":["a","b"]}}, False),
+  ({"title":"T","flags":{"nested":{"a":1}}}, False),
+  # The older cache format is no longer this file's shape.
   ({"id":"k7q2m9xa","slug":"thread-schemas","title":"T","state":"active","created":TS,"last-event":TS,
-    "tip":E3,"events-since-checkpoint":0,"children":[],
-    "claims":[{"by":ident,"intent":"i","since":TS,"last-seen":TS}]}, True),
-  ({"id":"k7q2m9xa","slug":"thread-schemas","title":"T","state":"inactive","created":TS,"last-event":TS,
-    "tip":E3,"events-since-checkpoint":0,"children":[],"claims":[]}, True),
-  ({"id":"k7q2m9xa","slug":"thread-schemas","title":"T","state":"active","created":TS,"last-event":TS,
-    "tip":E3,"events-since-checkpoint":0,"claims":[],
-    "children":[{"id":"m3n4p5","title":"C","state":"merged","merged":"c0003"}]}, True),
-  ({"id":"k7q2m9xa","slug":"thread-schemas","title":"T","state":"active","created":TS,"last-event":TS,
-    "tip":E3,"events-since-checkpoint":0,"claims":[],
-    "children":[{"id":"m3n4p5","title":"C","state":"merged","landed":True}]}, False),
-  ({"id":"k7q2m9xa","slug":"thread-schemas","title":"T","state":"archived","created":TS,"last-event":TS,
     "tip":E3,"events-since-checkpoint":0,"children":[],"claims":[]}, False)],
 }
 fails = 0

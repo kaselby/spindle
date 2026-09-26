@@ -1,4 +1,4 @@
-"""Commits stage only the threads a command touched, never the whole store (Kira 09-23 14:06)."""
+"""Commits stage only the threads a command touched, never the whole store."""
 
 from __future__ import annotations
 

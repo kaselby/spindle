@@ -15,7 +15,7 @@ from .limits import LIMITS
 EVENT_LIST_CAP = 15
 CLAIMS_DONT_LOCK = "Claims show who's working; they don't lock anything."
 
-NAMESPACE_HELP = "put the thread in this namespace (~/.spindle/<ns>/), a folder that groups threads"
+NAMESPACE_HELP = "put the thread in this namespace (<store>/<ns>/), a folder that groups threads"
 NAMESPACE_RULE = "1-32 characters: lowercase letters, digits, '-' and '_', starting with a letter or digit"
 
 
@@ -224,3 +224,25 @@ def bad_namespace(value: str, source: str) -> str:
     else:
         fix = f"Try {example}, or leave out --ns for the default namespace."
     return f"{source} {value!r} isn't a valid namespace. A namespace is {NAMESPACE_RULE}. {fix}"
+
+
+READING_GUIDE = "reading-guide.md"
+
+# The first line is the rule. It is an HTML comment, so it stays in the file
+# for whoever edits it but isn't shown on the view page or counted.
+READING_GUIDE_TEMPLATE = """\
+<!-- Where to look and in what order, for someone new to this thread; never status, next steps or handoff notes (those go in the checkpoint). Under {cap:,} characters; doctor checks every local path. -->
+<!-- Point at anything, inside or outside the thread: this thread's docs/ and artifacts/, repo paths (~/..., /...), branches, PRs, URLs, another thread's <id>:docs/<file>. Replace the lines below. -->
+1. `docs/<file>.md`: what it is. Read it first because ...
+2. `~/<repo>/<path>` on branch `<branch>`: what's there, and what to read in it.
+3. `<other-thread-id>:docs/<file>.md`: the background this work builds on.
+"""
+
+
+def reading_guide_template(thread_id: str, path: str) -> str:
+    from .limits import LIMITS
+
+    return (
+        READING_GUIDE_TEMPLATE.format(cap=LIMITS["reading_guide_chars"])
+        + f"\n<!-- Save it as {path} and edit it directly. `thread view {thread_id}` shows it. -->\n"
+    )

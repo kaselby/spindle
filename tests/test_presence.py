@@ -65,7 +65,7 @@ def test_skipped_checkpoint_banner_reports_event_kinds_and_clears_at_checkpoint(
         artifact = path / "artifacts" / f"run-{n}.txt"
         artifact.write_text(str(n), encoding="utf-8")
         assert run(
-            "register", identifier, f"artifacts/run-{n}.txt", "--kind", "experiment",
+            "register", identifier, f"artifacts/run-{n}.txt", "--kind", "artifact",
             "--purpose", f"run {n}", "--root", root,
         ).code == 0
     for n in range(3):
@@ -73,12 +73,12 @@ def test_skipped_checkpoint_banner_reports_event_kinds_and_clears_at_checkpoint(
     assert run("note", identifier, "one caveat", "--root", root).code == 0
     assert run(
         "release", identifier, "--skip", "the registrations are the handoff", "--root", root,
-        "--by", "tav-still-drake/tav",
+        "--by", "scout-still-drake/scout",
     ).code == 0
 
     view = run("view", identifier, "--root", root).out
     assert (
-        '> **Released without a checkpoint** by tav-still-drake: '
+        '> **Released without a checkpoint** by scout-still-drake: '
         '"the registrations are the handoff". Since c0001: '
     ) in view
     assert "2 registrations" in view
@@ -161,14 +161,14 @@ def test_doctor_shelves_an_inactive_thread_and_any_event_reopens_it(root, make_t
     shelved = [event for event in events.read_events(path) if event["type"] == "state-changed"]
     assert shelved[-1]["payload"]["from"] == "active" and shelved[-1]["payload"]["to"] == "inactive"
     assert shelved[-1]["by"]["session"] == "doctor"
-    # D6: stored state, not derived.
-    assert store.read_yaml(path / "thread.yml", {})["state"] == "inactive"
+    # D6: the shelving is an event in the log; the state is folded from it.
+    assert events.state(path)["state"] == "inactive"
 
     assert run("note", identifier, "picking this back up", "--root", root).code == 0
     reopened = [event for event in events.read_events(path) if event["type"] == "state-changed"]
     assert reopened[-1]["payload"] == {"from": "inactive", "to": "active"}
     assert reopened[-1]["by"]["session"] == "s1"
-    assert store.read_yaml(path / "thread.yml", {})["state"] == "active"
+    assert events.state(path)["state"] == "active"
 
 
 def test_unsynced_nudge_appears_in_view(root, make_thread, run):

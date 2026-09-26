@@ -42,6 +42,12 @@ def identity(monkeypatch, tmp_path):
     # Never touch the real ~/.spindle: tests get their own home and store.
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("SPINDLE_ROOT", str(tmp_path / ".spindle"))
+    # Nor the real git config or global git ignore (project stores append to it),
+    # nor a launch folder pinned by the harness running the tests.
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "gitconfig"))
+    monkeypatch.delenv("SPINDLE_PROJECT", raising=False)
+    monkeypatch.delenv("SPINDLE_PROJECT_PID", raising=False)
 
 
 @pytest.fixture

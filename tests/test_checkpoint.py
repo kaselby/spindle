@@ -105,7 +105,7 @@ def test_unknown_sections_are_preserved_in_checkpoint_and_current_view(root, mak
     path = _thread_path(root, identifier)
     text = (
         "A checkpoint with local structure.\n\n"
-        "## Evidence Kira asked us to keep\n"
+        "## Evidence the user asked us to keep\n"
         "- first result\n- second result\n\n"
         "## Status\nReady for the next pass.\n\n"
         "## Risks and oddities\nThe edge case is still open.\n"
@@ -113,10 +113,10 @@ def test_unknown_sections_are_preserved_in_checkpoint_and_current_view(root, mak
     assert run("checkpoint", identifier, body(text), "--root", root).code == 0
 
     written = (path / "checkpoints" / "c0001.md").read_text(encoding="utf-8")
-    assert "## Evidence Kira asked us to keep\n- first result\n- second result" in written
+    assert "## Evidence the user asked us to keep\n- first result\n- second result" in written
     assert "## Risks and oddities\nThe edge case is still open." in written
     view = run("view", identifier, "--root", root).out
-    assert "## Evidence Kira asked us to keep" in view
+    assert "## Evidence the user asked us to keep" in view
     assert "## Risks and oddities" in view
 
 

@@ -13,7 +13,10 @@ Threads are a memory feature designed around tracking ongoing work and offloadin
 
 One thread corresponds to one ongoing stream of work. A single task that can be accomplished in a few simple steps is not a thread. Threads can nest and contain subthreads. They can merge into parent threads when complete, or flow into new threads when they undergo fundamental changes.
 
-Everything lives in one store, `~/.spindle/`, which is its own git repo:
+Threads live in a store, its own git repo: `~/.spindle/`, or
+`<project>/.spindle/` if setup chose per-project stores (the session-start
+snapshot names the store it shows). In a project with no store yet, the first
+`thread create` starts one.
 
 ```
 ~/.spindle/
@@ -22,7 +25,7 @@ Everything lives in one store, `~/.spindle/`, which is its own git repo:
       archived/YYYY-MM/    threads that have ended, by the month they ended
 ```
 
-Concretely, a thread is a folder under `~/.spindle/<namespace>/threads/`:
+Concretely, a thread is a folder under `<store>/<namespace>/threads/`:
 
 ```
 k7q2m9-latency-regression/
@@ -34,10 +37,14 @@ k7q2m9-latency-regression/
   artifacts/     things the work produced and should keep: reports, results, scripts
   index.md       generated list of docs and artifacts
   scratch/       your working files; not tracked by git, not shown to anyone
-  thread.yml     generated summary the tool keeps for itself
+  thread.yml     metadata: title, parent, flags.
+  reading-guide.md  optional: where to look and in what order, for a newcomer
 ```
 
-The `thread` cli is used to interact with threads, and contains automated features for logging and event tracking. Avoid editing thread files by hand (except for scratch or writing docs or artifacts).
+The `thread` cli is used to interact with threads, and contains automated
+features for logging and event tracking. Thread files generally shouldn't be
+edited directly - use the tool instead. The exceptions are docs/artifacts and
+the reading-guide (if applicable), and if you need to add flags to `thread.yml`.
 
 Every action on a thread (a claim, a note, a task, a checkpoint) is recorded
 as an **event** with an id, in the thread's log.
@@ -46,8 +53,9 @@ as an **event** with an id, in the thread's log.
 
 1. **Read it:** `thread view <id>`. The page shows the origin, one line per
    past checkpoint, the latest checkpoint, recent activity, subthreads, who's
-   working, open tasks, and the docs worth reading. Read the origin first,
-   because everything else is measured against it.
+   working, open tasks, the reading guide if there is one, and the docs worth
+   reading. Read the origin first, because everything else is measured
+   against it.
 2. **Claim it:** `thread claim <id> --intent "what you're doing"`. This tells
    other sessions you're here. It doesn't lock anything, and it lasts until
    you release it or go 4 hours without activity. `thread create` claims
@@ -118,7 +126,7 @@ revising, reanchoring, or reopening a thread, and
 
 ## Recording as you work
 
-Apart from checkpoints, there are five places to put things while you work.
+Apart from checkpoints, there are six places to put things while you work.
 They differ in who will see them.
 
 - **Notes:** `thread note <id> "..."`. Gotchas, small findings, dead ends,
@@ -131,21 +139,27 @@ They differ in who will see them.
   If one grows its own reasoning, turn it into a subthread with
   `thread promote`.
 - **Docs:** files in `docs/`, registered with `thread register <id>
-  docs/x.md --kind guide --purpose "..." --read-when "..."`. Guides written for
+  docs/x.md --kind doc --purpose "..." --read-when "..."`. Guides written for
   future sessions: how to run the experiments, where the code lives and how it's structured, a reading guide to the research reports, etc... Every doc is listed on the view page with when to read it, so
   this is how you make sure something gets seen.
 - **Artifacts:** files in `artifacts/`, registered with `thread register <id>
-  artifacts/x --kind report --purpose "..."`. Records of what the work
+  artifacts/x --kind artifact --purpose "..."`. Records of what the work
   produced: results, reports, scripts, diagrams. They're listed on the view
   page with their purpose. A directory of related files can be registered
   as one entry.
+- **Reading guide:** `reading-guide.md` at the thread root. Optional
+  orientation guide pointing to what files to read first or linking to
+  resources outside the thread. Not a status document, shouldn't reference
+  next steps or ongoing work. Just pointers on where to find information.
+  Keep it under 1,500 characters; doctor flags a longer one and any local
+  path in it that no longer exists.
 - **Scratch:** `scratch/`. Anything in progress. It isn't tracked or shown to
   anyone.
 
-The difference between a doc and an artifact is intent. A doc is written to
-guide future work on the thread. An artifact is a record of what was done.
-The view page lists every doc but only the most recent artifacts (index.md
-has them all), so if the next session needs to read something, make it a doc.
+The difference between docs and artifacts is that docs are specifically
+written as guidelines or reference material for future sessions. Both are
+registered with `thread register` - `index.md` has a list of all registered
+docs and artifacts.
 
 ## Other sessions
 
@@ -157,8 +171,8 @@ For checkpoints, there's a safeguard in place to ensure that checkpoints don't h
 
 Threads can optionally be grouped into namespaces, for example one per
 agent. Use `thread create --ns <name>`, or set `SPINDLE_NAMESPACE`.
-Subthreads inherit their parent's namespace. `thread list` shows all
-namespaces grouped. `--ns <name>` filters to one.
+Subthreads can only be created in their parent's namespace. `thread list`
+shows all namespaces grouped. `--ns <name>` filters to one.
 
 Default to not using namespaces unless the user requests it or there is an established convention in place.
 
@@ -171,7 +185,8 @@ Default to not using namespaces unless the user requests it or there is an estab
 | `thread claim` / `release <id>` | start / stop working on a thread |
 | `thread note <id> "text"` | record a finding (not shown on the view page) |
 | `thread task add\|close\|remove\|list <id> ...` | the task list |
-| `thread register <id> <path> --kind K --purpose "..."` | keep a doc (needs `--read-when`) or artifact, a file or a directory. Max 5 MB |
+| `thread register <id> <path> --kind doc\|artifact --purpose "..."` | keep a doc (under docs/, needs `--read-when`) or artifact (under artifacts/), a file or a directory. Max 5 MB |
+| `thread reading-guide <id>` | the reading guide's template, or its size against the cap |
 | `thread checkpoint <id> [body.md] [--at <event-id>]` | write a checkpoint. No body prints the template |
 | `thread create "title" --origin o.md [--parent <id>] [--ns <name>]` | new thread. No `--origin` prints the template |
 | `thread promote <id> <task-id> "title" --origin o.md` | task to subthread |

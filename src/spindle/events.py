@@ -1,4 +1,4 @@
-"""Identity, append-only event I/O, and the thread.yml fold."""
+"""Identity, append-only event I/O, and the state fold (computed on read, never stored)."""
 
 from __future__ import annotations
 
@@ -11,17 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .limits import LIMITS
-from .store import ThreadError, atomic_text, current_state, parse_frontmatter, read_yaml, write_yaml
-
-
-# Child lifecycle events seen on the PARENT, and the child state each implies.
-_CHILD_STATE = {
-    "child-merged": "merged",
-    "child-dropped": "dropped",
-    "child-closed": "completed",  # written before the rename; read only
-    "child-reopened": "active",
-    "child-superseded": "dropped",  # legacy; supersede is no longer written
-}
+from .store import ThreadError, current_state
 
 
 def now() -> datetime:
@@ -63,8 +53,56 @@ def read_events(thread: Path) -> list[dict[str, Any]]:
                 f"{thread.name}/log.jsonl line {number} is not valid JSON ({exc.msg}); "
                 "fix or remove that line (check `git diff` in the .spindle folder)."
             ) from exc
+        problem = _shape_problem(event)
+        if problem:
+            raise ThreadError(
+                f"{thread.name}/log.jsonl line {number} is malformed ({problem}); "
+                "fix or remove that line (check `git diff` in the .spindle folder)."
+            )
         events.append(event)
     return events
+
+
+# Required keys per event type, mirroring schemas/event.schema.json (a test
+# keeps the two in step). Checked on read, so a damaged or hand-edited line is
+# named here instead of surfacing later as a traceback.
+EVENT_KEYS = ("id", "ts", "by", "type")
+PAYLOAD_KEYS: dict[str, tuple[str, ...]] = {
+    "created": ("title",),
+    "checkpoint": ("checkpoint", "at", "headline"),
+    "note": ("text",),
+    "task-added": ("task",), "task-closed": ("task",), "task-removed": ("task",), "task-edited": ("task",),
+    "child-created": ("child", "title"),
+    "child-merged": ("child", "checkpoint"),
+    "register": ("registration", "checkpoint"),
+    "state-changed": ("from", "to"),
+    "origin-replaced": ("previous", "after-checkpoint"),
+    "origin-revised": ("revision",),
+    "linked": ("kind", "target"), "unlinked": ("kind", "target"),
+    "merged-into": ("parent", "checkpoint"),
+    "child-closed": ("child",), "child-dropped": ("child",), "child-reopened": ("child",),
+    "child-superseded": ("child", "successor"),
+    "child-adopted": ("child", "title"),
+    "reparented": ("from", "to"),
+    "migrated": ("metadata",),
+}
+
+
+def _shape_problem(event: Any) -> str | None:
+    if not isinstance(event, dict):
+        return "not a JSON object"
+    missing = [key for key in EVENT_KEYS if key not in event]
+    if missing:
+        return f"missing {', '.join(missing)}"
+    if not isinstance(event["by"], dict) or "session" not in event["by"]:
+        return "`by` has no session"
+    payload = event.get("payload", {})
+    if not isinstance(payload, dict):
+        return "payload is not an object"
+    missing = [key for key in PAYLOAD_KEYS.get(event["type"], ()) if key not in payload]
+    if missing:
+        return f"{event['type']} payload is missing {', '.join(missing)}"
+    return None
 
 
 def tip(thread: Path) -> str | None:
@@ -90,8 +128,7 @@ def append(
 ) -> dict[str, Any]:
     """Append under an advisory lock; expected_tip makes the operation CAS."""
     if reopen and by.get("session") != "doctor" and kind != "state-changed":
-        cache = read_yaml(thread / "thread.yml", {})
-        if cache.get("state") == "inactive":
+        if lifecycle_state(read_events(thread)) == "inactive":
             append(
                 thread, "state-changed", {"from": "inactive", "to": "active"}, by,
                 expected_tip=expected_tip, reopen=False,
@@ -123,31 +160,31 @@ def append(
         handle.flush()
         os.fsync(handle.fileno())
         fcntl.flock(handle, fcntl.LOCK_UN)
-    regenerate(thread)
     return event
 
 
-def _origin(thread: Path) -> dict[str, Any]:
-    metadata, _ = parse_frontmatter((thread / "origin.md").read_text(encoding="utf-8"))
-    return metadata
+def lifecycle_state(log: list[dict[str, Any]]) -> str:
+    """Just the state: the last state-changed event, else active."""
+    for event in reversed(log):
+        if event["type"] == "state-changed":
+            return current_state(event["payload"]["to"], event["payload"].get("reason"))
+    return "active"
 
 
-def fold(thread: Path, events: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-    events = read_events(thread) if events is None else events
-    if not events:
+def state(thread: Path, log: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Where the thread stands, folded from its log. Read-only: nothing here is
+    stored, and nothing here is metadata (that is thread.yml's, metadata.read).
+    Subthreads come from a scan of the store (summary.children), not from here."""
+    log = read_events(thread) if log is None else log
+    if not log:
         raise ThreadError(f"{thread.name}/log.jsonl is empty; restore it from git in the .spindle folder.")
-    origin = _origin(thread)
-    identifier, _, slug = thread.name.partition("-")
-    state = "active"
+    lifecycle = "active"
     claims: dict[str, dict[str, Any]] = {}
-    children: dict[str, dict[str, Any]] = {}
     latest_checkpoint: dict[str, Any] | None = None
     last_checkpoint_index = -1
     superseded_by: str | None = None
-    reparented_to: str | None = None
-    links: list[dict[str, str]] = []
 
-    for index, event in enumerate(events):
+    for index, event in enumerate(log):
         session = event["by"]["session"]
         if session in claims:
             claims[session]["last-seen"] = event["ts"]
@@ -160,69 +197,49 @@ def fold(thread: Path, events: list[dict[str, Any]] | None = None) -> dict[str, 
         elif kind == "release":
             claims.pop(payload.get("session", session), None)
         elif kind == "state-changed":
-            state = current_state(payload["to"], payload.get("reason"))
+            lifecycle = current_state(payload["to"], payload.get("reason"))
             superseded_by = payload.get("successor", payload.get("superseded-by", superseded_by))
         elif kind == "checkpoint":
             latest_checkpoint = {
                 "id": payload["checkpoint"], "ts": event["ts"], "headline": payload["headline"]
             }
             last_checkpoint_index = index
-        elif kind in ("child-created", "child-adopted"):
-            children[payload["child"]] = {
-                "id": payload["child"], "title": payload["title"], "state": "active"
-            }
-        elif kind == "child-merged" and payload.get("child") in children:
-            children[payload["child"]]["state"] = "merged"
-            if payload.get("checkpoint"):
-                children[payload["child"]]["merged"] = payload["checkpoint"]
-        elif kind == "reparented":
-            reparented_to = payload["to"]
-        elif kind == "linked":
-            link = {"kind": payload["kind"], "target": payload["target"]}
-            if link not in links:
-                links.append(link)
-        elif kind == "unlinked":
-            links = [
-                link for link in links
-                if link != {"kind": payload["kind"], "target": payload["target"]}
-            ]
-        elif kind in _CHILD_STATE and payload.get("child") in children:
-            children[payload["child"]]["state"] = _CHILD_STATE[kind]
 
     # Lifecycle bookkeeping written by merge/complete/drop is not "work
     # since the checkpoint" -- a finished thread must not read as unsynced.
     unsynced_count = sum(
-        1 for event in events[last_checkpoint_index + 1:]
+        1 for event in log[last_checkpoint_index + 1:]
         if event["type"] not in BOOKKEEPING
     )
-    prior = read_yaml(thread / "thread.yml", {})
     result: dict[str, Any] = {
-        "id": identifier,
-        "slug": slug,
-        "title": origin["title"],
-        "state": state,
-        "created": events[0]["ts"],
-        "last-event": events[-1]["ts"],
-        "tip": events[-1]["id"],
+        "state": lifecycle,
+        "created": log[0]["ts"],
+        "last-event": log[-1]["ts"],
+        "tip": log[-1]["id"],
         "events-since-checkpoint": unsynced_count,
         "unsynced": unsynced_count > LIMITS["unsynced_nudge"],
         "claims": list(claims.values()),
-        "children": list(children.values()),
-        "links": links,
+        "links": links(log),
         "scratch-newer-than-checkpoint": scratch_newer(thread, latest_checkpoint),
     }
-    for field in ("parent", "supersedes", "project", "namespace"):
-        if field in origin:
-            result[field] = origin[field]
-    if reparented_to:
-        # The log outranks origin.md's frontmatter once a thread has moved.
-        result["parent"] = reparented_to
     if superseded_by:
         result["superseded-by"] = superseded_by
     if latest_checkpoint:
         result["last-checkpoint"] = latest_checkpoint
-    if prior.get("tasks-hash"):
-        result["tasks-hash"] = prior["tasks-hash"]
+    return result
+
+
+def links(log: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """This thread's own links (one-sided), folded from linked/unlinked events."""
+    result: list[dict[str, str]] = []
+    for event in log:
+        if event["type"] not in ("linked", "unlinked"):
+            continue
+        link = {"kind": event["payload"]["kind"], "target": event["payload"]["target"]}
+        if event["type"] == "linked" and link not in result:
+            result.append(link)
+        elif event["type"] == "unlinked":
+            result = [item for item in result if item != link]
     return result
 
 
@@ -232,12 +249,6 @@ def scratch_newer(thread: Path, checkpoint: dict[str, Any] | None) -> int:
     threshold = parse_time(checkpoint["ts"]).timestamp() + 1 if checkpoint else 0
     scratch = thread / "scratch"
     return sum(1 for path in scratch.rglob("*") if path.is_file() and path.stat().st_mtime > threshold)
-
-
-def regenerate(thread: Path) -> dict[str, Any]:
-    value = fold(thread)
-    write_yaml(thread / "thread.yml", value)
-    return value
 
 
 def event_summary(event: dict[str, Any], *, full_note: bool = False) -> str:
@@ -263,12 +274,13 @@ def event_summary(event: dict[str, Any], *, full_note: bool = False) -> str:
     return ", ".join(pieces) or "-"
 
 
-# Lifecycle bookkeeping written by merge/complete/drop and by shelving is
-# not "work since the checkpoint": it is left out of the count everywhere.
+# Lifecycle bookkeeping written by merge/complete/drop and by shelving, and
+# the one-time `migrated` baseline, are not "work since the checkpoint": they
+# are left out of the count everywhere.
 # What displays leave out of "events since the last checkpoint": the bookkeeping a
 # lifecycle verb writes after the checkpoint it closes over. Claims and releases
 # are shown and counted like anything else.
-BOOKKEEPING = frozenset({"merged-into", "state-changed"})
+BOOKKEEPING = frozenset({"merged-into", "state-changed", "migrated"})
 
 # The one rule the GATES use (release gate, clean gate, CAS): does this event
 # carry anything a checkpoint writer needs to have read? Presence (claim,
@@ -276,7 +288,15 @@ BOOKKEEPING = frozenset({"merged-into", "state-changed"})
 # about what is shown or counted on the view page depends on this.
 # Links are display-only (they never gate), so they are shown and counted but
 # are not work a checkpoint writer must have read.
-NOT_WORK = frozenset({"created", "claim", "release", "merged-into", "state-changed", "linked", "unlinked"})
+NOT_WORK = frozenset({
+    "created", "claim", "release", "merged-into", "state-changed", "linked", "unlinked", "migrated",
+})
+
+
+def is_activity(event: dict[str, Any]) -> bool:
+    """Somebody wrote this: not the doctor's upkeep, not the migration's baseline.
+    Decides when a thread last saw activity (shelving, list order)."""
+    return event["by"]["session"] != "doctor" and event["type"] != "migrated"
 
 
 def carries_work(event: dict[str, Any]) -> bool:

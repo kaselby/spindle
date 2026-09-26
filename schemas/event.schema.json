@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "threads/event.schema.json",
   "title": "log.jsonl — one event (one line)",
-  "$comment": "One line of log.jsonl. The log is the only way a thread changes; thread.yml and index.md are folds over it. Every event has the same envelope (id, ts, by, type, payload), and the set of types is closed.",
+  "$comment": "One line of log.jsonl: what happened, appended by the tool and never rewritten. The thread's state (lifecycle, claims, counts, links) and index.md are computed from it; its metadata is thread.yml's, edited directly, and hand edits there aren't events. Every event has the same envelope (id, ts, by, type, payload), and the set of types is closed.",
   "type": "object",
   "required": ["id", "ts", "by", "type"],
   "additionalProperties": false,
@@ -37,7 +37,8 @@
         "child-superseded",
         "child-adopted",
         "reparented",
-        "reopened"
+        "reopened",
+        "migrated"
       ]
     },
     "payload": { "type": "object" }
@@ -46,13 +47,15 @@
     {
       "if": { "properties": { "type": { "const": "created" } } },
       "then": {
-        "description": "First event of every thread. Folder laid out, origin.md written.",
+        "description": "First event of every thread. Folder laid out, origin.md and thread.yml written. The payload is the initial metadata (the baseline for the view's 'thread.yml since the thread began' line until the first checkpoint) plus the namespace it was created in.",
         "properties": { "payload": {
           "type": "object", "additionalProperties": false,
           "required": ["title"],
           "properties": {
             "title": { "type": "string" },
             "parent": { "$ref": "common.schema.json#/$defs/threadId" },
+            "from-task": { "type": "string" },
+            "flags": { "$ref": "thread.schema.json#/properties/flags" },
             "supersedes": { "description": "Legacy: supersede was retired; never written now.", "$ref": "common.schema.json#/$defs/threadId" },
             "namespace": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$" }
           }
@@ -140,7 +143,7 @@
     {
       "if": { "properties": { "type": { "const": "child-created" } } },
       "then": {
-        "description": "On the PARENT. A subthread started, directly or by promoting a task. The parent's view of its children is derived from these.",
+        "description": "On the PARENT. A subthread started, directly or by promoting a task. History for the parent's arc and counts; the subthreads list itself comes from scanning the store for threads whose thread.yml names this parent.",
         "properties": { "payload": {
           "type": "object", "additionalProperties": false,
           "required": ["child", "title"],
@@ -271,7 +274,7 @@
     {
       "if": { "properties": { "type": { "const": "child-closed" } } },
       "then": {
-        "description": "On the PARENT. Legacy, read but never written: a child closed without merging. The fold reads it as the child completing.",
+        "description": "On the PARENT. Legacy, read but never written: a child closed without merging. History only; the child's own log says how it ended.",
         "properties": { "payload": {
           "type": "object", "additionalProperties": false,
           "required": ["child"],
@@ -328,7 +331,7 @@
     {
       "if": { "properties": { "type": { "const": "child-adopted" } } },
       "then": {
-        "description": "On the NEW PARENT, paired with `reparented` on the moved thread. The fold treats it like `child-created`.",
+        "description": "On the NEW PARENT, paired with `reparented` on the moved thread. History, like `child-created`; the subthreads list comes from the child's thread.yml.",
         "properties": { "payload": {
           "type": "object", "additionalProperties": false,
           "required": ["child", "title"],
@@ -344,7 +347,7 @@
     {
       "if": { "properties": { "type": { "const": "reparented" } } },
       "then": {
-        "description": "On the MOVED thread. Overrides origin.md's `parent` in the fold. No folder moves, since subthreads live flat beside their parents.",
+        "description": "On the MOVED thread, as history: the tool writes the new parent to thread.yml at the same time, and nothing reads the parent from this event (older versions did; `thread migrate` used the last one). No folder moves, since subthreads live flat beside their parents.",
         "properties": { "payload": {
           "type": "object", "additionalProperties": false,
           "required": ["from", "to"],
@@ -361,6 +364,18 @@
       "then": {
         "description": "On the thread being reopened, immediately before its state-changed from a final state (completed, dropped, merged) to active.",
         "properties": { "payload": { "type": "object", "additionalProperties": false, "properties": {} } }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "migrated" } } },
+      "then": {
+        "description": "Written once per thread by `thread migrate` when thread.yml became the metadata file. The payload is the metadata it wrote: the baseline for the view's 'thread.yml since the last checkpoint' line until the next checkpoint. Not work: it counts nowhere as activity and doesn't wake an inactive thread.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["metadata"],
+          "properties": { "metadata": { "$ref": "thread.schema.json" } }
+        } },
+        "required": ["payload"]
       }
     }
   ]

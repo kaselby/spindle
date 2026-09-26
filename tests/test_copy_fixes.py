@@ -1,4 +1,4 @@
-"""Fixes from ayin's worker's first-time-user pass (2026-09-23)."""
+"""Fixes from a first-time-user pass."""
 
 from __future__ import annotations
 

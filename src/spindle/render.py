@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+import json
 from collections import Counter
 from datetime import timedelta
 from pathlib import Path
 
 from typing import Any
 
-from . import events, guide, tasks
+from . import events, guide, metadata, summary, tasks, tree
 from .limits import LIMITS
 from .store import (
-    FINAL_STATES, ThreadError, atomic_text, is_final, iter_threads, parse_frontmatter, read_yaml,
-    resolve_thread, root_of,
+    FINAL_STATES, ThreadError, atomic_text, is_final, namespace_of, parse_frontmatter, resolve_thread,
+    root_of,
 )
 
 
@@ -75,9 +76,14 @@ def _registration_target(thread: Path, payload: dict[str, Any]) -> Path | None:
     return owner / relative
 
 
+def kind_of(registration: dict[str, Any]) -> str:
+    """doc or artifact, by folder. Registrations written before the change
+    carry one of twelve retired kinds; the folder always decided the section."""
+    return "doc" if registration["path"].startswith("docs/") else "artifact"
+
+
 def _entry_details(thread: Path, payload: dict[str, Any], date: str, *, artifact: bool) -> str:
-    item = payload["registration"]
-    details = [item["kind"]]
+    details: list[str] = []
     target = _registration_target(thread, payload)
     if target is not None and target.is_dir():
         count = sum(1 for path in target.rglob("*") if path.is_file())
@@ -97,7 +103,7 @@ def _index_lines(thread: Path, *, artifact_limit: int | None) -> list[str]:
             item = payload["registration"]
             details = _entry_details(thread, payload, date, artifact=False)
             lines += [
-                f"- {_name(payload)} ({details}) — {item['purpose']}",
+                f"- {_name(payload)}{f' ({details})' if details else ''} — {item['purpose']}",
                 f"  *Read when:* {item['read-when']}",
             ]
     else:
@@ -108,7 +114,7 @@ def _index_lines(thread: Path, *, artifact_limit: int | None) -> list[str]:
         for payload, date in reversed(shown):
             item = payload["registration"]
             details = _entry_details(thread, payload, date, artifact=True)
-            lines.append(f"- {_name(payload)} ({details}) — {item['purpose']}")
+            lines.append(f"- {_name(payload)}{f' ({details})' if details else ''} — {item['purpose']}")
         hidden = len(artifacts) - len(shown)
         if hidden:
             lines.append(f"- … {hidden} more; see `{thread / 'index.md'}`")
@@ -118,10 +124,9 @@ def _index_lines(thread: Path, *, artifact_limit: int | None) -> list[str]:
 
 
 def index_text(thread: Path) -> str:
-    cache = read_yaml(thread / "thread.yml", {})
-    checkpoint = cache.get("last-checkpoint", {})
+    checkpoint = events.state(thread).get("last-checkpoint", {})
     lines = [
-        f"# {cache.get('title', thread.name)} — docs and artifacts",
+        f"# {metadata.title_or_name(thread)} — docs and artifacts",
         f"<!-- generated at checkpoint {checkpoint.get('id', 'none')}, {events.timestamp()}; do not edit -->",
         "",
         *_index_lines(thread, artifact_limit=None),
@@ -191,7 +196,9 @@ def _arc(root: Path, log: list[dict[str, Any]], children: list[dict[str, Any]],
     return [text for _, text in sorted(rows, key=lambda row: row[0])]
 
 
-def _children_rows(children: list[dict[str, Any]], identifier: str, *, deep: bool) -> list[str]:
+def _children_rows(
+    children: list[dict[str, Any]], identifier: str, *, deep: bool, unreadable: int = 0,
+) -> list[str]:
     rows = [
         f"- {child['id']} — {child['title']} ({child['state']})"
         for child in children if not is_final(child["state"])
@@ -206,6 +213,11 @@ def _children_rows(children: list[dict[str, Any]], identifier: str, *, deep: boo
             for state in FINAL_STATES if any(child["state"] == state for child in ended)
         )
         rows.append(f"- {counts} — `thread view {identifier} --deep` lists them")
+    if unreadable:
+        rows.append(
+            f"- {unreadable} thread{'s' if unreadable != 1 else ''} couldn't be read and "
+            f"{'are' if unreadable != 1 else 'is'} left out (possibly subthreads); `thread doctor` says which."
+        )
     return rows or ["- None."]
 
 
@@ -240,41 +252,48 @@ def _related_rows(root: Path, thread: Path, cache: dict[str, Any]) -> list[str]:
     if cache.get("parent"):
         try:
             parent_path = resolve_thread(root, cache["parent"])
-            parent_cache = read_yaml(parent_path / "thread.yml", {})
-            rows.append(f"- Parent {cache['parent']}: {parent_cache.get('title', parent_path.name)}")
         except ThreadError:
-            rows.append(f"- Parent {cache['parent']} (not found)")
+            rows.append(
+                f"- Parent {cache['parent']} (not found: no thread has that id, so this one is shown "
+                f"as top-level; `thread doctor {cache['id']}` says how to fix it)"
+            )
+        else:
+            if namespace_of(parent_path) != namespace_of(thread):
+                rows.append(
+                    f"- Parent {cache['parent']} (in namespace {namespace_of(parent_path) or 'default'}, "
+                    "and a subthread must share its parent's namespace, so this one is shown as top-level; "
+                    f"`thread doctor {cache['id']}` says how to fix it)"
+                )
+            else:
+                rows.append(f"- Parent {cache['parent']}: {metadata.title_or_name(parent_path)}")
 
     labels = {"related": "Related to", "blocked-by": "Blocked by", "continues": "Continues"}
     for link in cache.get("links", []):
         target_id = link["target"]
         try:
             target = resolve_thread(root, target_id)
-            target_cache = read_yaml(target / "thread.yml", {})
-            state = f" ({target_cache.get('state', 'unknown')})" if link["kind"] != "related" else ""
-            rows.append(f"- {labels[link['kind']]} {target_id}: {target_cache.get('title', target.name)}{state}")
         except ThreadError:
             rows.append(f"- {labels[link['kind']]} {target_id} (not found)")
+            continue
+        state = ""
+        if link["kind"] != "related":
+            try:
+                state = f" ({events.lifecycle_state(events.read_events(target))})"
+            except summary.UNREADABLE:
+                state = " (state unknown: its log can't be read)"
+        rows.append(f"- {labels[link['kind']]} {target_id}: {metadata.title_or_name(target)}{state}")
 
     reverse_labels = {
         "continues": "Continued by",
         "blocked-by": "Blocks",
         "related": "Related to",
     }
-    identifier = cache["id"]
-    for other in iter_threads(root):
-        if other == thread:
-            continue
-        other_cache = read_yaml(other / "thread.yml", {})
-        for link in other_cache.get("links", []):
-            if link.get("target") != identifier:
-                continue
-            source_id = other_cache.get("id", other.name.split("-", 1)[0])
-            suffix = " (linked from there)" if link["kind"] == "related" else ""
-            rows.append(
-                f"- {reverse_labels[link['kind']]} {source_id}: "
-                f"{other_cache.get('title', other.name)}{suffix}"
-            )
+    for other, link in summary.linked_from(root, cache["id"]):
+        suffix = " (linked from there)" if link["kind"] == "related" else ""
+        rows.append(
+            f"- {reverse_labels[link['kind']]} {summary.thread_id(other)}: "
+            f"{metadata.title_or_name(other)}{suffix}"
+        )
 
     # Old stores can still carry the retired supersede pointers.
     if cache.get("supersedes"):
@@ -286,8 +305,8 @@ def _related_rows(root: Path, thread: Path, cache: dict[str, Any]) -> list[str]:
 
 def view(root: Path, thread: Path, *, deep: bool = False) -> str:
 
-    cache = events.regenerate(thread)
     log = events.read_events(thread)
+    cache = summary.describe(thread, log)  # a bad thread.yml stops here, with how to fix it
     identifier = cache["id"]
     _origin_metadata, origin_body = parse_frontmatter((thread / "origin.md").read_text(encoding="utf-8"))
     origin_text = guide.strip_comments(origin_body).strip()
@@ -347,6 +366,10 @@ def view(root: Path, thread: Path, *, deep: bool = False) -> str:
     title_block.append(" · ".join(facts))
     if cache.get("namespace"):
         title_block.append(f"Namespace: {cache['namespace']}")
+    if cache.get("flags"):
+        # Shown as written in thread.yml: true, not Python's True.
+        shown = (json.dumps(value) if value is None or isinstance(value, bool) else value for value in cache["flags"].values())
+        title_block.append("Flags: " + ", ".join(f"{name}={value}" for name, value in zip(cache["flags"], shown)))
     title_block += [
         "*This page is the thread's orientation. Read the origin first; "
         "everything after it is measured against it.*", "",
@@ -358,6 +381,13 @@ def view(root: Path, thread: Path, *, deep: bool = False) -> str:
         + (f" {_plural(scratch, 'scratch file')} changed since then." if scratch else ""),
         f"> **Latest event id:** {cache['tip']} (checkpoints may need it as `--at`)",
     ]
+    # Hand edits to thread.yml aren't events; this diff is how they show.
+    changed = metadata.changes(summary.metadata_baseline(thread, log), metadata.read(thread))
+    if changed:
+        banner.insert(-1, (
+            f"> **thread.yml {'since the last checkpoint' if checkpoint_name else 'since the thread began'}:** "
+            f"{changed}."
+        ))
     for event in skipped:
         banner.append(
             f"> **Released without a checkpoint** by {event['by']['session']}: "
@@ -365,7 +395,7 @@ def view(root: Path, thread: Path, *, deep: bool = False) -> str:
         )
 
 
-    children = cache.get("children", [])
+    children, unreadable_children = summary.children_scan(root, identifier)
     arc = _arc(root, log, children, deep=deep)
     checkpoints = [event for event in log if event["type"] == "checkpoint"]
     if checkpoints:
@@ -404,6 +434,18 @@ def view(root: Path, thread: Path, *, deep: bool = False) -> str:
         task_rows = ["- None."]
 
     around = _related_rows(root, thread, cache)
+    reading_path = thread / guide.READING_GUIDE
+    if reading_path.is_file():
+        # errors="replace": a stray non-UTF-8 byte shows as U+FFFD instead of failing the view.
+        text = reading_path.read_text(encoding="utf-8", errors="replace")
+        reading = ["# Reading guide", guide.strip_comments(text).strip(), ""]
+        docs_intro: list[str] = []
+    else:
+        reading = []
+        docs_intro = [
+            f"*No reading guide. For pointers and a reading order, `thread reading-guide {identifier}` "
+            "prints the template.*"
+        ]
     return "\n".join([
         *title_block, *banner, "",
         "# Origin: why this exists", *origin_history, origin_text, "",
@@ -413,10 +455,11 @@ def view(root: Path, thread: Path, *, deep: bool = False) -> str:
         *(arc or ["- No checkpoints yet."]), "",
         current_heading, *current, "",
         "# Since the last checkpoint", since_note, *happened, "",
-        "# Subthreads", *_children_rows(children, identifier, deep=deep), "",
+        "# Subthreads", *_children_rows(children, identifier, deep=deep, unreadable=len(unreadable_children)), "",
         "# Who's working", *(claim_rows or ["- Nobody."]), "",
         "# Open tasks", *task_rows, "",
-        "# Docs and artifacts", *_index_body(thread), "",
+        *reading,
+        "# Docs and artifacts", *docs_intro, *_index_body(thread), "",
         "# Related threads", *(around or ["- None."]),
     ]).replace("\n\n\n", "\n\n") + "\n"
 
@@ -450,8 +493,10 @@ def replay(
 
 
 def list_threads(root: Path, paths: list[Path], *, only: str | None = None) -> str:
-    """One self-describing line per thread, grouped by namespace (default first),
-    with a single footer. ``only`` is the namespace `--ns` filtered to, if any.
+    """Every thread as a tree, grouped by namespace (default first), with a single
+    footer. Subthreads are indented under their parent (see tree.py); one line per
+    thread with its state, who's working, and events since checkpoint. ``only`` is
+    the namespace `--ns` filtered to, if any.
 
     With no namespaced threads there is one group and no heading, as before
     namespaces existed; otherwise every group, the default included, gets one.
@@ -460,9 +505,21 @@ def list_threads(root: Path, paths: list[Path], *, only: str | None = None) -> s
         if only is not None:
             return f"No active threads in namespace {only}. `thread list` shows every namespace.\n"
         return "No active threads. `thread create \"title\"` prints the origin template to start one.\n"
-    groups: dict[str, list[str]] = {}
+    caches: list[dict] = []
+    seen: dict[str, str] = {}
+    unreadable = 0
     for path in paths:
-        cache = events.regenerate(path)
+        try:
+            log = events.read_events(path)
+            cache = summary.describe(path, log)
+        except summary.UNREADABLE:
+            unreadable += 1
+            continue
+        caches.append(cache)
+        seen[cache["id"]] = tree.last_activity(log, cache)
+
+    def line(row: tree.Row) -> str:
+        cache = row.cache
         claims = ", ".join(claim["by"]["session"] for claim in cache.get("claims", []))
         count = cache["events-since-checkpoint"]
         blocked = []
@@ -471,16 +528,20 @@ def list_threads(root: Path, paths: list[Path], *, only: str | None = None) -> s
                 continue
             try:
                 target = resolve_thread(root, link["target"])
-                if not is_final(read_yaml(target / "thread.yml", {}).get("state")):
+                if not is_final(events.lifecycle_state(events.read_events(target))):
                     blocked.append(link["target"])
-            except ThreadError:
+            except summary.UNREADABLE:
                 continue
-        blocked_text = f" · blocked by {', '.join(blocked)}" if blocked else ""
-        groups.setdefault(cache.get("namespace") or "", []).append(
-            f"{cache['id']} ({cache['state']}) {cache['title']} · "
+        extra = f" · blocked by {', '.join(blocked)}" if blocked else ""
+        if row.orphan:
+            extra += f" · subthread of {cache['parent']}"
+        return (
+            f"{'  ' * row.depth}{cache['id']} ({cache['state']}) {cache['title']} · "
             f"{'claimed by ' + claims if claims else 'no claims'} · "
-            f"{_plural(count, 'event')} since checkpoint{blocked_text}"
+            f"{_plural(count, 'event')} since checkpoint{extra}"
         )
+
+    groups = {name: [line(row) for row in rows] for name, rows in tree.arrange(caches, seen).items()}
     headed = only is not None or any(groups)
     lines: list[str] = []
     for name in sorted(groups, key=lambda key: (key != "", key)):
@@ -489,7 +550,12 @@ def list_threads(root: Path, paths: list[Path], *, only: str | None = None) -> s
                 lines.append("")
             lines.append(f"# Namespace: {name or 'default'}")
         lines.extend(groups[name])
-    footer = f"{guide.CLAIMS_DONT_LOCK} `thread view <id>` shows a thread."
+    footer = f"Subthreads are indented under their parent. {guide.CLAIMS_DONT_LOCK} `thread view <id>` shows a thread."
+    if unreadable:
+        footer = (
+            f"{unreadable} thread{'s' if unreadable != 1 else ''} couldn't be read and "
+            f"{'are' if unreadable != 1 else 'is'} left out; `thread doctor` says which. " + footer
+        )
     if len(groups) > 1:
         footer += " `thread list --ns <name>` shows one namespace."
     lines += ["", footer]

@@ -1,4 +1,4 @@
-"""A merge either refuses before writing anything, or goes through (09-23: the
+"""A merge either refuses before writing anything, or goes through (the
 first real merge half-applied when a check ran after its first write)."""
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ def test_an_over_limit_body_refuses_and_changes_nothing(root, run, body, make_th
 
 
 def test_gates_ignore_presence_but_the_view_still_shows_it(root, run, body, make_thread):
-    """carries_work is for gates only (Kira 09-23): another session's claim doesn't
+    """carries_work is for gates only: another session's claim doesn't
     force --at on a checkpoint, and the claim is still listed and counted on view."""
     identifier = make_thread("Watched")
     assert run("checkpoint", identifier, body(CP), "--root", root).code == 0

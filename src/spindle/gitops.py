@@ -3,15 +3,37 @@
 from __future__ import annotations
 
 import subprocess
+import time
 from collections.abc import Iterable
 from pathlib import Path
 
+from .store import ThreadError
+
+# The whole store is one repo, so two sessions committing in the same instant
+# collide on .git/index.lock. The other commit takes milliseconds: wait it out.
+LOCK_WAITS = (0.1, 0.2, 0.4, 0.8, 1.5)
+
 
 def _git(cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["git", *args], cwd=cwd, check=check, text=True,
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-    )
+    for wait in (*LOCK_WAITS, None):
+        result = subprocess.run(
+            ["git", *args], cwd=cwd, text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        if result.returncode == 0 or "index.lock" not in result.stderr:
+            break
+        if wait is None:
+            # By now the change is already on disk; only the commit is missing.
+            raise ThreadError(
+                "Recorded, but not committed to git yet: another git process held the store's "
+                "lock. Don't run the command again; this is committed with the thread's next "
+                "change. If it keeps happening while no git is running, a crashed git left "
+                f"{cwd / '.git' / 'index.lock'} behind; delete that file.", code=5,
+            )
+        time.sleep(wait)
+    if check and result.returncode:
+        raise subprocess.CalledProcessError(result.returncode, result.args, result.stdout, result.stderr)
+    return result
 
 
 def init(root: Path) -> None:

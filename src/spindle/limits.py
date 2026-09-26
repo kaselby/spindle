@@ -12,8 +12,10 @@ LIMITS = {
     "unsynced_nudge": 8,
     "release_events": 3,
     "stale_claim_hours": 4,
-    "artifact_index": 8,
+    "artifact_index": 25,
     "register_bytes": 5 * 1024 * 1024,
     "inactive_days": 14,
+    "context_inactive": 10,
     "old_scratch_days": 30,
+    "reading_guide_chars": 1500,
 }

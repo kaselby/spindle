@@ -12,8 +12,8 @@ description: >
 The Spindle plugin gives you the `thread` command and a snapshot of the active
 threads at the start of each session. One step is left, and it's done once per
 harness: installing Spindle's standing instructions, which tell every future
-session that threads exist and when to use them. Setup does that, and also
-creates the thread store (`~/.spindle`, a git repository) if it doesn't exist.
+session that threads exist and when to use them. Setup does that, and records
+where threads are stored.
 
 ## 1. Know which harness you're in
 
@@ -28,13 +28,20 @@ Your system prompt normally says which harness you're in. If you can't tell,
 ask the user rather than guessing: the wrong name writes to a file this
 harness never reads.
 
-## 2. Tell the user what will change, then run it
+## 2. Ask where threads should live
+
+Ask the user, unless they've said: `global` (the default, one store at
+`~/.spindle`) or `project` (each project's threads in `<project>/.spindle`,
+started by the first `thread create` there). The choice is saved in
+`~/.spindle/config.yml`.
+
+## 3. Tell the user what will change, then run it
 
 Setup writes into the user's harness configuration, so say which file (from
 the list above) before running it. Then:
 
 ```
-thread setup --harness <name>
+thread setup --harness <name> --scope <global|project>
 ```
 
 It prints what it did. Running it again is safe: it replaces only its own file

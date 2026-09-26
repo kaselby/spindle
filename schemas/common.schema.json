@@ -72,9 +72,12 @@
       "properties": {
         "path": { "$ref": "#/$defs/relPath" },
         "kind": {
-          "description": "What kind of file it is. guide, runbook and reading-order are doc kinds; the rest are artifact kinds.",
+          "description": "doc (the path is under docs/) or artifact (under artifacts/); the tool refuses a kind that doesn't match the folder. Older registrations carry one of twelve retired kinds; readers map those by folder, so they stay valid here but are never written now.",
           "type": "string",
-          "enum": ["guide", "runbook", "reading-order", "report", "experiment", "dataset", "weights", "diagram", "script", "harness", "presentation", "other"]
+          "anyOf": [
+            { "enum": ["doc", "artifact"] },
+            { "description": "Retired kinds, readable in old logs only.", "enum": ["guide", "runbook", "reading-order", "report", "experiment", "dataset", "weights", "diagram", "script", "harness", "presentation", "other"] }
+          ]
         },
         "purpose": {
           "description": "One line: what this is for. Capped so the index stays one line per entry.",
@@ -97,6 +100,14 @@
         {
           "if": { "properties": { "path": { "pattern": "^docs/" } } },
           "then": { "required": ["read-when"] }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "doc" } }, "required": ["kind"] },
+          "then": { "properties": { "path": { "pattern": "^docs/" } } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "artifact" } }, "required": ["kind"] },
+          "then": { "properties": { "path": { "pattern": "^artifacts/" } } }
         }
       ]
     }

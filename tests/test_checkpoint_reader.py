@@ -1,4 +1,4 @@
-"""Reading past checkpoints in full: `replay --checkpoint cNNNN` and `--checkpoints` (Kira 09-23)."""
+"""Reading past checkpoints in full: `replay --checkpoint cNNNN` and `--checkpoints`."""
 
 from __future__ import annotations
 

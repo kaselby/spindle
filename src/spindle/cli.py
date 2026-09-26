@@ -11,25 +11,26 @@ import sys
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from . import checkpoint, doctor, events, guide, lifecycle, render, tasks
+from . import scope as scopes
+from . import checkpoint, doctor, events, guide, lifecycle, metadata, render, summary, tasks
 from .limits import LIMITS
 from .store import (
     NeedsInput, ThreadError, atomic_text, initialize, iter_threads, markdown, new_thread_id,
-    parse_frontmatter, read_yaml, resolve_thread, root_path, slugify, write_yaml,
+    parse_frontmatter, resolve_thread, root_path, slugify, write_yaml,
     thread_home, is_active, namespace_of, strip_comments,
 )
 
 ORIGIN_TEMPLATE = guide.ORIGIN_TEMPLATE
-KINDS = [
-    "guide", "runbook", "reading-order", "report", "experiment", "dataset",
-    "weights", "diagram", "script", "harness", "presentation", "other",
-]
+# A registration is a doc (docs/, read to understand the work) or an artifact
+# (artifacts/, what the work produced). The kind must match the folder.
+KINDS = ["doc", "artifact"]
+KIND_FOLDER = {"doc": "docs", "artifact": "artifacts"}
 LINK_KINDS = ["related", "blocked-by", "continues"]
 
 
 
 def _common(parser: argparse.ArgumentParser, *, identity: bool = False, data: bool = False) -> None:
-    parser.add_argument("--root", help="the thread store (default: $SPINDLE_ROOT, else ~/.spindle)")
+    parser.add_argument("--root", help="the thread store (default: $SPINDLE_ROOT, else by the scope in ~/.spindle/config.yml)")
     if identity:
         parser.add_argument("--by", help="act as this session[/agent] instead of THREAD_SESSION")
     if data:
@@ -62,9 +63,15 @@ def _setup(args: argparse.Namespace) -> None:
               as_json=args.json)
         return
     lines = []
-    root = root_path(args.root, initializing=True)
+    if args.scope:
+        scopes.write_scope(args.scope)
+        lines.append(f"Scope set to {args.scope} ({scopes.config_path()})")
+    root, how = scopes.locate(args.root)
     store = "existing"
-    if root.exists():
+    if how == "project":
+        store = "per project"
+        lines.append("Each project's store is started by the first `thread create` there.")
+    elif root.exists():
         root_path(args.root)  # an existing folder must already be a store; this says how to fix it if not
     else:
         initialize(root)
@@ -98,6 +105,8 @@ def parser() -> argparse.ArgumentParser:
     how = setup_cmd.add_mutually_exclusive_group()
     how.add_argument("--check", action="store_true", help="only report: current, outdated, or missing")
     how.add_argument("--remove", action="store_true", help="take the instructions out again (the store stays)")
+    setup_cmd.add_argument("--scope", choices=list(scopes.SCOPES),
+                           help="global (~/.spindle, the default) or project (<launch folder>/.spindle)")
     _common(setup_cmd, data=True)
 
     create = commands.add_parser("create", help="start a thread (no --origin: print the origin template)")
@@ -158,7 +167,8 @@ def parser() -> argparse.ArgumentParser:
     register = commands.add_parser("register", help="list a file or directory in docs/ or artifacts/ on the view page")
     register.add_argument("thread")
     register.add_argument("path", help="relative to the thread folder, under docs/ or artifacts/")
-    register.add_argument("--kind", required=True, choices=KINDS)
+    register.add_argument("--kind", required=True, choices=KINDS,
+                          help="doc (under docs/) or artifact (under artifacts/); must match the folder")
     register.add_argument("--purpose", required=True, help="what it is, at most 160 characters")
     register.add_argument("--read-when", help="when a reader should open it (required for docs)")
     _common(register, identity=True, data=True)
@@ -249,9 +259,19 @@ def parser() -> argparse.ArgumentParser:
     archive = commands.add_parser("archive", help="move finished threads (merged, completed, dropped) into threads/archived/")
     _common(archive, identity=True, data=True)
 
-    listing = commands.add_parser("list", help="active threads by namespace, their state, who's working, events since checkpoint")
+    listing = commands.add_parser("list", help="active threads as a tree by namespace: their state, who's working, events since checkpoint")
     listing.add_argument("--ns", help="only this namespace; `default` means threads created without one")
     _common(listing, identity=True, data=True)
+
+    reading = commands.add_parser(
+        "reading-guide", help="where the thread's optional reading guide goes; prints the template if there's none yet")
+    reading.add_argument("thread")
+    _common(reading, identity=True, data=True)
+
+    migrate = commands.add_parser(
+        "migrate", help="one-time: move every thread's metadata into thread.yml (safe to run again)")
+    migrate.add_argument("--dry-run", action="store_true", help="say what would change; write nothing")
+    _common(migrate, identity=True, data=True)
 
     path = commands.add_parser("path", help="print a thread's folder")
     path.add_argument("thread")
@@ -322,6 +342,16 @@ def _default_namespace() -> str | None:
     return _clean_namespace(os.environ.get("SPINDLE_NAMESPACE"), "SPINDLE_NAMESPACE")
 
 
+def _require_parent_namespace(parent: Path, namespace: str | None, source: str) -> None:
+    """A subthread lives in its parent's namespace."""
+    if namespace != namespace_of(parent):
+        raise ThreadError(
+            f"{parent.name.split('-', 1)[0]} is in namespace {namespace_of(parent) or 'default'}, and a "
+            f"subthread lives in its parent's namespace, so {source} {namespace or 'default'} can't be used "
+            f"here. Leave {source} out and the subthread goes into {namespace_of(parent) or 'default'}."
+        )
+
+
 def _create(
     root: Path,
     title: str,
@@ -334,6 +364,8 @@ def _create(
 ) -> Path:
     if namespace is not None:
         namespace = _clean_namespace(namespace)
+    if parent is not None:
+        _require_parent_namespace(parent, namespace, "the namespace")
     if not title.strip() or len(title) > 80 or "\n" in title:
         raise ThreadError(
             f"a thread title is one line of at most 80 characters; this one is {len(title)}"
@@ -343,32 +375,27 @@ def _create(
     _validate_origin(body)
     identifier = new_thread_id(root)
     destination = thread_home(root, f"{identifier}-{slugify(title)}", namespace)
-    metadata: dict[str, Any] = {
-        "thread": identifier, "title": title, "created": events.timestamp(), "by": by,
-    }
+    # origin.md is the narrative; its frontmatter only says whose it is and when.
+    front: dict[str, Any] = {"thread": identifier, "created": events.timestamp(), "by": by}
+    # thread.yml is the metadata; people edit it directly from here on.
+    values: dict[str, Any] = {"title": title}
     if parent:
-        metadata["parent"] = parent.name.split("-", 1)[0]
+        values["parent"] = parent.name.split("-", 1)[0]
     if from_task:
-        metadata["from-task"] = from_task
-    if namespace:
-        metadata["namespace"] = namespace
+        values["from-task"] = from_task
     try:
         for folder in ("checkpoints", "docs", "artifacts", "scratch"):
             (destination / folder).mkdir(parents=True, exist_ok=True)
-        atomic_text(destination / "origin.md", markdown(metadata, body))
+        atomic_text(destination / "origin.md", markdown(front, body))
+        metadata.write(destination, values)
         atomic_text(destination / "log.jsonl", "")
         write_yaml(destination / "tasks.yml", {"tasks": []})
-        created_payload: dict[str, Any] = {"title": title}
-        if parent:
-            created_payload["parent"] = metadata["parent"]
+        # The initial metadata, so the view can show what changed before the first checkpoint.
+        created_payload: dict[str, Any] = dict(values)
         if namespace:
             created_payload["namespace"] = namespace
         events.append(destination, "created", created_payload, by)
         events.append(destination, "claim", {}, by)
-        cache = events.regenerate(destination)
-        import hashlib
-        cache["tasks-hash"] = hashlib.sha256((destination / "tasks.yml").read_bytes()).hexdigest()
-        write_yaml(destination / "thread.yml", cache)
         render.write_index(destination)
         if parent:
             payload = {"child": identifier, "title": title}
@@ -379,6 +406,22 @@ def _create(
         shutil.rmtree(destination, ignore_errors=True)
         raise
     return destination
+
+
+def _migrate_report(results: list[dict[str, Any]]) -> str:
+    lines = []
+    for item in results:
+        line = f"- {item['thread']}: {item['status']}"
+        if item.get("error"):
+            line += f": {item['error']}"
+        if item.get("metadata"):
+            line += " (" + ", ".join(f"{key}: {value}" for key, value in item["metadata"].items()) + ")"
+        lines.append(line)
+        lines += [f"  note: {note}" for note in item.get("notes", [])]
+    failed = sum(1 for item in results if item["status"] == "failed")
+    if failed:
+        lines.append(f"{failed} thread{'s' if failed != 1 else ''} failed and {'were' if failed != 1 else 'was'} left as they were; fix the error and run `thread migrate` again.")
+    return "\n".join(lines) + "\n" if lines else "No threads in the store.\n"
 
 
 def _emit(value: Any, *, as_json: bool = False) -> None:
@@ -433,9 +476,10 @@ def run(args: argparse.Namespace) -> None:
             "with `thread link <new> continues <old>`."
         )
     if command == "init":
-        root = root_path(args.root, initializing=True)
-        initialize(root)
-        _emit({"root": str(root)} if args.json else f"Initialized {root}\n", as_json=args.json)
+        root, how = scopes.locate(args.root)
+        notes = scopes.start_project_store(root) if how == "project" else (initialize(root) or [])
+        _emit({"root": str(root), "notes": notes} if args.json
+              else "".join(f"{note}\n" for note in notes) or f"Initialized {root}\n", as_json=args.json)
         return
     if command == "setup":
         _setup(args)
@@ -444,15 +488,28 @@ def run(args: argparse.Namespace) -> None:
         _emit(guide.origin_template(f'thread create "{args.title or "<title>"}" --origin <file>'))
         return
 
+    notes: list[str] = []
+    if command == "create" and args.origin:
+        path, how = scopes.locate(args.root)
+        if how == "project" and not path.exists():
+            notes = scopes.start_project_store(path)
     root = root_path(args.root)
     by = events.identity(getattr(args, "by", None))
 
     if command == "create":
         if not args.title:
             raise ThreadError('create needs a title: thread create "<title>" --origin <file>')
-        # Check the namespace before printing a template, so a bad one is caught
-        # before the origin is written rather than after.
-        namespace = _clean_namespace(args.ns) if args.ns is not None else _default_namespace()
+        # Check the namespace and parent before printing a template, so a bad
+        # one is caught before the origin is written rather than after.
+        parent = resolve_thread(root, args.parent) if args.parent else None
+        if args.ns is not None:
+            namespace = _clean_namespace(args.ns)
+        elif parent is not None:
+            namespace = namespace_of(parent)  # a subthread lives in its parent's namespace
+        else:
+            namespace = _default_namespace()
+        if parent is not None:
+            _require_parent_namespace(parent, namespace, "--ns")
         if not args.origin:
             extra = "".join(
                 f" --{flag} {value}" for flag, value in (
@@ -460,17 +517,19 @@ def run(args: argparse.Namespace) -> None:
                 ) if value
             )
             raise NeedsInput(guide.origin_template(f'thread create "{args.title}"{extra} --origin <file>'))
-        parent = resolve_thread(root, args.parent) if args.parent else None
         if parent:
             _prepare(parent, by)
         path = _create(root, args.title, args.origin, by, parent=parent, from_task=args.from_task, namespace=namespace)
         value = {"id": path.name.split("-", 1)[0], "path": str(path)}
-        _emit(value if args.json else f"Created {value['id']} at {path}\n", as_json=args.json)
+        if notes:
+            value["notes"] = notes
+        _emit(value if args.json else "".join(f"{note}\n" for note in notes) + f"Created {value['id']} at {path}\n",
+              as_json=args.json)
         return
 
     if command == "doctor":
         paths = [resolve_thread(root, args.thread)] if args.thread else iter_threads(root)
-        grouped = [(path, doctor.run(path, by, full=True)) for path in paths]
+        grouped = [(path, doctor.run_safely(path, by)) for path in paths]
         if args.json:
             _emit({path.name.split('-', 1)[0]: findings for path, findings in grouped}, as_json=True)
         else:
@@ -485,16 +544,35 @@ def run(args: argparse.Namespace) -> None:
             _emit("\n".join(f"- {line}" for line in moved) + "\n" if moved else "Nothing to archive\n")
         return
 
+    if command == "migrate":
+        from . import migrate
+
+        results = migrate.run(root, by, dry_run=args.dry_run)
+        if args.json:
+            _emit(results, as_json=True)
+        else:
+            _emit(_migrate_report(results))
+        return
+
     if command == "list":
         paths = [path for path in iter_threads(root) if is_active(path)]
         for path in paths:
-            _prepare(path, by)
+            try:
+                _prepare(path, by)
+            except summary.UNREADABLE:
+                pass  # render.list_threads skips it and counts it
         wanted = None
         if args.ns is not None:
             wanted = _clean_namespace(args.ns)
             paths = [path for path in paths if namespace_of(path) == wanted]
         if args.json:
-            _emit([read_yaml(path / "thread.yml", {}) for path in paths], as_json=True)
+            described = []
+            for path in paths:
+                try:
+                    described.append(summary.describe(path))
+                except summary.UNREADABLE:
+                    continue
+            _emit(described, as_json=True)
         else:
             _emit(render.list_threads(root, paths, only=(wanted or "default") if args.ns is not None else None))
         return
@@ -507,9 +585,25 @@ def run(args: argparse.Namespace) -> None:
         _emit({"path": str(thread)} if args.json else f"{thread}\n", as_json=args.json)
     elif command == "view":
         if args.json:
-            _emit(read_yaml(thread / "thread.yml", {}), as_json=True)
+            value = summary.describe(thread)
+            value["children"] = summary.children(root, identifier)
+            _emit(value, as_json=True)
         else:
             _emit(render.view(root, thread, deep=args.deep))
+    elif command == "reading-guide":
+        where = thread / guide.READING_GUIDE
+        cap = LIMITS["reading_guide_chars"]
+        if where.is_file():
+            size = len(strip_comments(where.read_text(encoding="utf-8")).strip())
+            value = {"path": str(where), "exists": True, "chars": size, "cap": cap}
+            text = (
+                f"{where} ({size:,} of {cap:,} characters{', over the cap' if size > cap else ''}). "
+                f"Edit it directly; `thread view {identifier}` shows it.\n"
+            )
+        else:
+            value = {"path": str(where), "exists": False, "cap": cap}
+            text = guide.reading_guide_template(identifier, str(where))
+        _emit(value if args.json else text, as_json=args.json)
     elif command == "merge":
         value = lifecycle.merge(
             root, thread, by, promote=args.promote, task_ids=args.tasks,
@@ -638,6 +732,7 @@ def run(args: argparse.Namespace) -> None:
             )
         if args.ns is not None:
             namespace = _clean_namespace(args.ns)
+            _require_parent_namespace(thread, namespace, "--ns")
         else:
             namespace = namespace_of(thread)
         if not args.origin:
@@ -652,6 +747,13 @@ def run(args: argparse.Namespace) -> None:
         _emit(value if args.json else f"Promoted {args.task_id} to {child_id}\n", as_json=args.json)
     elif command == "register":
         relpath, path = _registration_path(thread, args.path)
+        folder = relpath.split("/", 1)[0]
+        if KIND_FOLDER[args.kind] != folder:
+            right = "doc" if folder == "docs" else "artifact"
+            raise ThreadError(
+                f"--kind {args.kind} is for files under {KIND_FOLDER[args.kind]}/, and {relpath} is under "
+                f"{folder}/. Use --kind {right}, or move the file to {KIND_FOLDER[args.kind]}/ first."
+            )
         if relpath.startswith("docs/") and not args.read_when:
             raise ThreadError(
                 'docs need --read-when "<when a reader should open it>", e.g. "before changing the parser". '
@@ -670,7 +772,7 @@ def run(args: argparse.Namespace) -> None:
         registration = {"path": relpath, "kind": args.kind, "purpose": args.purpose}
         if args.read_when:
             registration["read-when"] = args.read_when
-        checkpoint_id = read_yaml(thread / "thread.yml", {}).get("last-checkpoint", {}).get("id", "pending")
+        checkpoint_id = events.state(thread).get("last-checkpoint", {}).get("id", "pending")
         event = events.append(thread, "register", {
             "registration": registration, "checkpoint": checkpoint_id,
         }, by)
@@ -728,6 +830,14 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     except PermissionError as exc:
         print(f"permission denied: {exc.filename}", file=sys.stderr)
+        return 2
+    except UnicodeDecodeError as exc:
+        # thread.yml and the reading guide handle this themselves; this is the
+        # backstop for any other file, so it never ends in a traceback.
+        print(
+            f"a file isn't UTF-8 text ({exc.reason} at byte {exc.start}). `thread doctor` names the thread.",
+            file=sys.stderr,
+        )
         return 2
 
 

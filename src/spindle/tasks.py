@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import secrets
 from pathlib import Path
 from typing import Any
@@ -28,10 +27,6 @@ def read(thread: Path) -> list[dict[str, Any]]:
                 "Use `thread task` to change tasks."
             )
     return value["tasks"]
-
-
-def _hash(thread: Path) -> str:
-    return hashlib.sha256((thread / "tasks.yml").read_bytes()).hexdigest()
 
 
 def _new_id(used: set[str]) -> str:
@@ -60,18 +55,10 @@ def snapshot(log: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return result
 
 
-def _store_hash(thread: Path) -> None:
-    cache = events.regenerate(thread)
-    cache["tasks-hash"] = _hash(thread)
-    write_yaml(thread / "thread.yml", cache)
-
-
 def sync(thread: Path, by: dict[str, str]) -> list[dict[str, Any]]:
-    """Diff the board against task events, assigning ids to hand additions."""
-    cache = read_yaml(thread / "thread.yml", {})
-    current_hash = _hash(thread)
-    if cache.get("tasks-hash") == current_hash:
-        return []
+    """Diff the board against task events, assigning ids to hand additions.
+    Runs before every command; reading two small files is cheap enough that
+    nothing is cached to skip it."""
     board = read(thread)
     log = events.read_events(thread)
     previous = snapshot(log)
@@ -117,7 +104,6 @@ def sync(thread: Path, by: dict[str, str]) -> list[dict[str, Any]]:
             emitted.append(events.append(thread, "task-removed", {
                 "task": task_id, "text": old["text"], "hand-edit": True,
             }, by))
-    _store_hash(thread)
     return emitted
 
 
@@ -143,7 +129,6 @@ def add(
     if from_thread:
         payload["from"] = from_thread
     events.append(thread, "task-added", payload, by)
-    _store_hash(thread)
     return task
 
 
@@ -157,7 +142,6 @@ def close(thread: Path, task_id: str, by: dict[str, str]) -> dict[str, Any]:
     task["done"] = True
     write_yaml(thread / "tasks.yml", {"tasks": board})
     events.append(thread, "task-closed", {"task": task_id, "text": task["text"]}, by)
-    _store_hash(thread)
     return task
 
 
@@ -169,7 +153,6 @@ def remove(thread: Path, task_id: str, by: dict[str, str]) -> dict[str, Any]:
     board.remove(task)
     write_yaml(thread / "tasks.yml", {"tasks": board})
     events.append(thread, "task-removed", {"task": task_id, "text": task["text"]}, by)
-    _store_hash(thread)
     return task
 
 
@@ -185,4 +168,3 @@ def promote(thread: Path, task_id: str, child_id: str, by: dict[str, str]) -> No
     events.append(thread, "task-edited", {
         "task": task_id, "text": task["text"], "promoted": child_id,
     }, by)
-    _store_hash(thread)

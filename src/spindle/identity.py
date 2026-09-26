@@ -6,6 +6,7 @@ Spindle's conventions. The first source that has a value wins:
 1. THREAD_SESSION / THREAD_AGENT: set by hand, for anything not listed below.
 2. Agent runtimes that run the harness, which know more than the harness does
    (the named agent, not just this conversation). Kiln: KILN_AGENT_ID.
+   kiln-lite: AGENT_ID, with the agent named by AGENT_HOME.
 3. The harness session. SPINDLE_HARNESS_SESSION is set by Spindle's own plugins
    (pi and omp don't export their session id; Claude Code does, but the hook
    sets it too so that the innermost harness wins when one runs inside another).
@@ -32,12 +33,32 @@ def _explicit(env: Mapping[str, str]) -> dict[str, str] | None:
 
 
 def _kiln(env: Mapping[str, str]) -> dict[str, str] | None:
-    # Kiln session ids are <agent>-<adjective>-<noun>, e.g. ayin-deep-reach.
+    # Kiln session ids are <agent>-<adjective>-<noun>, e.g. scout-deep-reach, and
+    # forks add a suffix. KILN_AGENT_HOME names the agent when its folder name
+    # prefixes the session id; otherwise (a home like ~/.scout) split the id.
     session = env.get("KILN_AGENT_ID")
     if not session:
         return None
+    agent = os.path.basename((env.get("KILN_AGENT_HOME") or "").rstrip("/"))
+    if agent and session.startswith(f"{agent}-"):
+        return {"session": session, "agent": agent}
     parts = session.rsplit("-", 2)
     return {"session": session, "agent": parts[0] if len(parts) == 3 else session}
+
+
+def _kiln_lite(env: Mapping[str, str]) -> dict[str, str] | None:
+    # kiln-lite exports AGENT_ID (the session, e.g. worker-loud-dune, or a fork like
+    # worker-young-loch-36c9) and AGENT_HOME (the agent's home folder, named for the
+    # agent). AGENT_ID alone is too generic a name to trust, so both must be set
+    # and agree: the session id starts with the home folder's name.
+    session = env.get("AGENT_ID")
+    home = env.get("AGENT_HOME")
+    if not session or not home:
+        return None
+    agent = os.path.basename(home.rstrip("/"))
+    if not agent or not session.startswith(f"{agent}-"):
+        return None
+    return {"session": session, "agent": agent}
 
 
 def short_session(harness: str, session_id: str) -> str:
@@ -58,7 +79,7 @@ def _fallback(env: Mapping[str, str]) -> dict[str, str]:
     return {"session": session, "agent": session}
 
 
-HOSTS: list[Source] = [_kiln]
+HOSTS: list[Source] = [_kiln, _kiln_lite]
 SOURCES: list[Source] = [_explicit, *HOSTS, _harness]
 
 

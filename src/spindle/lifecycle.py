@@ -16,14 +16,14 @@ import subprocess
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from . import checkpoint, events, gitops, guide, render, store, tasks
+from . import checkpoint, events, gitops, guide, metadata, render, store, summary, tasks
 from .store import (
     thread_home, namespace_of, is_active, is_final, iter_threads,
-    NeedsInput, ThreadError, atomic_text, markdown, parse_frontmatter, read_yaml, resolve_thread,
+    NeedsInput, ThreadError, atomic_text, markdown, parse_frontmatter, resolve_thread, root_of,
 )
 
 # One exit code per gate, so a caller can tell refusals apart. 2 (refusal),
-# 3 (release) and 4 (CAS) belong to phase 1.
+# 3 (release) and 4 (CAS) belong to phase 1; 5 is a commit blocked by git's lock (gitops).
 NO_PARENT = 10
 BAD_STATE = 11
 PARENT_BAD_STATE = 12
@@ -40,8 +40,12 @@ def thread_id(thread: Path) -> str:
     return thread.name.split("-", 1)[0]
 
 
-def _cache(thread: Path) -> dict[str, Any]:
-    return read_yaml(thread / "thread.yml", {})
+def _state(thread: Path) -> str:
+    return events.lifecycle_state(events.read_events(thread))
+
+
+def _last_checkpoint(thread: Path) -> dict[str, Any]:
+    return events.state(thread).get("last-checkpoint", {})
 
 
 def _state_advice(thread: Path) -> str:
@@ -49,7 +53,7 @@ def _state_advice(thread: Path) -> str:
 
 
 def _require_state(thread: Path, code: int, *, verb: str) -> str:
-    state = _cache(thread).get("state", "active")
+    state = _state(thread)
     if is_final(state):
         raise ThreadError(
             f"{thread_id(thread)} is {state}, so it can't be {verb}. {_state_advice(thread)}", code=code
@@ -61,9 +65,8 @@ def _require_clean(thread: Path, code: int, *, verb: str, role: str = "") -> str
     """The latest checkpoint must cover every counted event. Returns its id.
 
     ``role`` names the side ("the child", "the parent") for merge."""
-    cache = _cache(thread)
     identifier = thread_id(thread)
-    checkpoint_id = cache.get("last-checkpoint", {}).get("id")
+    checkpoint_id = _last_checkpoint(thread).get("id")
     count = sum(1 for event in events.since_checkpoint(events.read_events(thread))
                 if events.carries_work(event))
     if count or not checkpoint_id:
@@ -85,18 +88,49 @@ def _require_clean(thread: Path, code: int, *, verb: str, role: str = "") -> str
 
 
 def _headline(thread: Path) -> str:
-    return _cache(thread).get("last-checkpoint", {}).get("headline", thread.name)
+    return _last_checkpoint(thread).get("headline", thread.name)
 
 
-def _open_children(thread: Path) -> list[dict[str, Any]]:
-    return [child for child in _cache(thread).get("children", []) if not is_final(child["state"])]
+def _open_children(thread: Path, *, verb: str) -> list[dict[str, Any]]:
+    """The gate's subthread scan. Unlike the view's, it refuses when a thread
+    that might be a subthread can't be read: not knowing isn't the same as
+    having none, and --force can't move a thread whose thread.yml it can't read."""
+    identifier = thread_id(thread)
+    rows, unknown = summary.children_scan(root_of(thread), identifier)
+    if unknown:
+        count = len(unknown)
+        raise ThreadError(
+            f"can't {verb} {identifier}: {count} thread{'' if count == 1 else 's'} in its namespace "
+            f"couldn't be read ({', '.join(unknown)}), and {'it' if count == 1 else 'any of them'} "
+            f"may be a subthread of {identifier}. Fix {'it' if count == 1 else 'them'} first; "
+            "`thread doctor` says what's wrong.",
+            code=OPEN_CHILDREN,
+        )
+    return [row for row in rows if not is_final(row["state"])]
 
 
 def _parent_of(root: Path, thread: Path) -> Path | None:
     """The one place that maps a thread to its parent (merge stays parent-only,
     but nothing below hard-codes the lookup)."""
-    parent = _cache(thread).get("parent")
-    return resolve_thread(root, parent) if parent else None
+    parent = metadata.read(thread).get("parent")
+    if not parent:
+        return None
+    try:
+        found = resolve_thread(root, parent)
+    except ThreadError:
+        raise ThreadError(
+            f"{thread_id(thread)}'s thread.yml names parent {parent}, but no thread has that id. "
+            f"Fix `parent:` in {metadata.path_of(thread)} (or remove it to make the thread top-level), "
+            "or restore the parent's folder from git. `thread doctor` lists these."
+        ) from None
+    if namespace_of(found) != namespace_of(thread):
+        raise ThreadError(
+            f"{thread_id(thread)}'s thread.yml names parent {parent}, which is in namespace "
+            f"{namespace_of(found) or 'default'}, not {namespace_of(thread) or 'default'}. A subthread "
+            f"lives in its parent's namespace. Fix `parent:` in {metadata.path_of(thread)} (or remove it "
+            "to make the thread top-level). `thread doctor` lists these."
+        )
+    return found
 
 
 def _copy(source: Path, destination: Path) -> None:
@@ -138,9 +172,12 @@ def _to_archive(root: Path, thread: Path, moment: str) -> Path:
 
 
 def _reparent(root: Path, child_id: str, old: Path, new: Path, by: dict[str, str]) -> None:
-    """Two events, `reparented` on the child and `child-adopted` on the new parent; no folder moves."""
+    """The child's thread.yml gets the new parent. Two events record it as
+    history, `reparented` on the child and `child-adopted` on the new parent;
+    no folder moves."""
     moved = resolve_thread(root, child_id)
-    title = _cache(moved).get("title", child_id)
+    title = metadata.title_or_name(moved)
+    metadata.update(moved, "parent", thread_id(new))
     events.append(moved, "reparented", {"from": thread_id(old), "to": thread_id(new)}, by)
     events.append(new, "child-adopted", {
         "child": child_id, "title": title, "from": thread_id(old),
@@ -150,7 +187,7 @@ def _reparent(root: Path, child_id: str, old: Path, new: Path, by: dict[str, str
 def _register(parent: Path, registration: dict[str, Any], by: dict[str, str], **extra: str) -> None:
     payload: dict[str, Any] = {
         "registration": dict(registration),
-        "checkpoint": _cache(parent).get("last-checkpoint", {}).get("id", "pending"),
+        "checkpoint": _last_checkpoint(parent).get("id", "pending"),
     }
     payload.update(extra)
     events.append(parent, "register", payload, by)
@@ -163,7 +200,9 @@ def _registered(thread: Path) -> dict[str, dict[str, Any]]:
     for payload, _ in render.registrations(thread):
         if payload.get("pointer"):
             continue
-        found[payload["registration"]["path"]] = payload["registration"]
+        registration = dict(payload["registration"])
+        registration["kind"] = render.kind_of(registration)  # old logs carry the retired kinds
+        found[registration["path"]] = registration
     return found
 
 
@@ -204,16 +243,21 @@ def merge(
             f"({guide.doc('lifecycle.md')}).", code=NO_PARENT,
         )
     parent_id = thread_id(parent)
+    # Everything the writes below read must be readable now. The rollback only
+    # undoes copied files, so a refusal after the first event half-merges.
+    metadata.read(parent)
+    tasks.read(parent)
     _require_state(child, BAD_STATE, verb="merged")
-    if is_final(_cache(parent).get("state", "active")):
+    if is_final(_state(parent)):
         raise ThreadError(
-            f"can't merge {child_id}: its parent {parent_id} is {_cache(parent)['state']}. "
+            f"can't merge {child_id}: its parent {parent_id} is {_state(parent)}. "
             f"{_state_advice(parent)}", code=PARENT_BAD_STATE,
         )
     child_cid = _require_clean(child, DIRTY, verb="merge", role="the child")
     parent_cid = _require_clean(parent, PARENT_DIRTY, verb="merge", role="the parent")
 
-    grandchildren = _open_children(child)
+    # The scan read every grandchild's thread.yml and log, or refused.
+    grandchildren = _open_children(child, verb="merge")
     if grandchildren and not force:
         names = ", ".join(item["id"] for item in grandchildren)
         raise ThreadError(
@@ -304,7 +348,7 @@ def merge(
 
         events.append(child, "merged-into", {"parent": parent_id, "checkpoint": parent_next}, by)
         closing = events.append(child, "state-changed", {
-            "from": _cache(child).get("state", "active"), "to": "merged",
+            "from": _state(child), "to": "merged",
         }, by, reopen=False)
 
         events.append(parent, "child-merged", {
@@ -358,7 +402,9 @@ def _finish(
         )
     checkpoint_id = _require_clean(thread, DIRTY, verb=verb)
 
-    children = _open_children(thread)
+    # The scan read every child's thread.yml and log, or refused, so the
+    # reparenting below can't stop partway on an unreadable one.
+    children = _open_children(thread, verb=verb)
     if children:
         names = ", ".join(item["id"] for item in children)
         if parent is None:
@@ -377,7 +423,7 @@ def _finish(
             _reparent(root, child["id"], thread, parent, by)
 
     ending = events.append(thread, "state-changed", {
-        "from": _cache(thread).get("state", "active"), "to": to,
+        "from": _state(thread), "to": to,
     }, by, reopen=False)
     if parent is not None:
         # Only drop reaches here with a parent: complete refused above.
@@ -412,8 +458,7 @@ def drop(root: Path, thread: Path, by: dict[str, str], *, force: bool = False) -
 
 def reopen(root: Path, thread: Path, by: dict[str, str]) -> dict[str, Any]:
     identifier = thread_id(thread)
-    cache = _cache(thread)
-    state = cache.get("state", "active")
+    state = _state(thread)
     if state == "inactive":
         raise ThreadError(
             f"{identifier} is inactive, not finished. It becomes active again on its own the next time "
@@ -425,7 +470,12 @@ def reopen(root: Path, thread: Path, by: dict[str, str]) -> dict[str, Any]:
             f"{identifier} is already {state}; nothing to reopen. `thread view {identifier}` shows where it stands.",
             code=BAD_STATE,
         )
-    checkpoint_id = cache.get("last-checkpoint", {}).get("id", "none")
+    checkpoint_id = _last_checkpoint(thread).get("id", "none")
+    # Before any write: a parent that doesn't resolve refuses here, not after the move.
+    parent = _parent_of(root, thread)
+    if parent is not None:
+        _state(parent)  # child-reopened's append reads the parent's log; a bad one refuses now
+
 
     events.append(thread, "reopened", {}, by, reopen=False)
     events.append(thread, "state-changed", {
@@ -433,7 +483,6 @@ def reopen(root: Path, thread: Path, by: dict[str, str]) -> dict[str, Any]:
     }, by, reopen=False)
     destination = thread_home(root, thread.name, namespace_of(thread))
     shutil.move(str(thread), str(destination))
-    parent = _parent_of(root, destination)
     if parent is not None:
         events.append(parent, "child-reopened", {"child": identifier}, by)
     touched = [thread, destination]
@@ -475,7 +524,8 @@ def reanchor(
     _validate_origin(body, reanchoring=True)
     old_origin = thread / "origin.md"
     old_metadata, _ = parse_frontmatter(old_origin.read_text(encoding="utf-8"))
-    new_title = title if title is not None else old_metadata["title"]
+    old_title = metadata.read(thread)["title"]
+    new_title = title if title is not None else old_title
     if not new_title.strip() or len(new_title) > 80 or "\n" in new_title:
         raise ThreadError(
             f"a thread title is one line of at most 80 characters; this one is {len(new_title)}"
@@ -487,22 +537,21 @@ def reanchor(
 
     replacements = [event for event in events.read_events(thread) if event["type"] == "origin-replaced"]
     previous = f"origin-{len(replacements) + 1}.md"
-    metadata: dict[str, Any] = {
-        "thread": old_metadata["thread"],
-        "title": new_title,
+    # The origin's frontmatter describes the origin document only; the title
+    # and everything else about the thread live in thread.yml.
+    front: dict[str, Any] = {
+        "thread": old_metadata.get("thread", identifier),
         "created": events.timestamp(),
         "by": by,
+        "previous": previous,
     }
-    for field in ("parent", "namespace", "from-task"):
-        if field in old_metadata:
-            metadata[field] = old_metadata[field]
-    metadata["previous"] = previous
 
     body = _previous_origin_last(body, f"→ {previous} (replaced after {checkpoint_id})")
     atomic_text(thread / previous, old_origin.read_text(encoding="utf-8"))
-    atomic_text(old_origin, markdown(metadata, body))
+    atomic_text(old_origin, markdown(front, body))
     payload = {"previous": previous, "after-checkpoint": checkpoint_id}
-    if new_title != old_metadata["title"]:
+    if new_title != old_title:
+        metadata.update(thread, "title", new_title)
         payload["title"] = new_title
     events.append(thread, "origin-replaced", payload, by)
     written, _ = checkpoint.create(
@@ -526,7 +575,7 @@ def link(thread: Path, kind: str, target: Path, by: dict[str, str]) -> dict[str,
     if identifier == target_id:
         raise ThreadError(f"{identifier} can't link to itself. Choose a different target.")
     item = {"kind": kind, "target": target_id}
-    if item in _cache(thread).get("links", []):
+    if item in events.links(events.read_events(thread)):
         raise ThreadError(
             f"{identifier} is already linked to {target_id} as {kind}. "
             f"Use `thread unlink {identifier} {kind} {target_id}` to remove it."
@@ -538,7 +587,7 @@ def link(thread: Path, kind: str, target: Path, by: dict[str, str]) -> dict[str,
 def unlink(thread: Path, kind: str, target_id: str, by: dict[str, str]) -> dict[str, Any]:
     identifier = thread_id(thread)
     item = {"kind": kind, "target": target_id}
-    if item not in _cache(thread).get("links", []):
+    if item not in events.links(events.read_events(thread)):
         raise ThreadError(
             f"{identifier} has no {kind} link to {target_id}. `thread view {identifier}` shows its links."
         )
@@ -584,16 +633,19 @@ def archive(root: Path, by: dict[str, str]) -> list[str]:
     moved: list[str] = []
     touched: list[Path] = []
     for thread in [path for path in iter_threads(root) if is_active(path)]:
-        cache = _cache(thread)
-        state = cache.get("state")
+        try:
+            log = events.read_events(thread)
+            state = events.lifecycle_state(log)
+        except summary.UNREADABLE:
+            continue  # a damaged log doesn't block archiving the rest; doctor names it
         if not is_final(state):
             continue
         changed = [
-            event for event in events.read_events(thread)
+            event for event in log
             if event["type"] == "state-changed"
             and store.current_state(event["payload"]["to"], event["payload"].get("reason")) == state
         ]
-        moment = changed[-1]["ts"] if changed else cache.get("last-event", events.timestamp())
+        moment = changed[-1]["ts"] if changed else log[-1]["ts"]
         destination = _to_archive(root, thread, moment)
         touched += [thread, destination]
         moved.append(f"{thread_id(destination)} → {destination.relative_to(root)}")

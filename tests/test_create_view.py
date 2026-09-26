@@ -134,7 +134,7 @@ def test_replay_with_nothing_to_show_says_so(root, make_thread, run):
 
 def test_completion_criteria_is_optional(root, tmp_path, run):
     path = tmp_path / "context-only.md"
-    path.write_text("## Context & Motivation\nKira asked for it.\n", encoding="utf-8")
+    path.write_text("## Context & Motivation\nThe user asked for it.\n", encoding="utf-8")
     result = run("create", "Context only", "--origin", path, "--root", root)
     assert result.code == 0
 

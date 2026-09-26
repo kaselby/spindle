@@ -55,10 +55,10 @@ DEFAULT_ROOT = Path("~/.spindle")
 
 
 def root_path(value: str | Path | None = None, *, initializing: bool = False) -> Path:
-    """The one global store: --root, else SPINDLE_ROOT, else ~/.spindle. Spindle is
-    built around a global store, not a per-project directory."""
-    chosen = value or os.environ.get("SPINDLE_ROOT") or os.environ.get("THREADS_ROOT") or DEFAULT_ROOT
-    path = Path(chosen).expanduser().resolve()
+    """The thread store: --root, else SPINDLE_ROOT, else the scope setting (scope.py)."""
+    from .scope import locate
+
+    path, how = locate(value)
     if initializing:
         return path
     if path.is_dir():
@@ -69,6 +69,8 @@ def root_path(value: str | Path | None = None, *, initializing: bool = False) ->
                 f"Run `thread init --root {path}` to make it one."
             )
         return path
+    if how == "project":
+        raise ThreadError(f"no thread store in {path.parent}; `thread create` starts one.")
     raise ThreadError(
         f"no thread store at {path}. Run `thread init` to create it, "
         "or point at another one with --root <path> or SPINDLE_ROOT."
@@ -122,9 +124,9 @@ def is_thread_dir(path: Path) -> bool:
     return path.is_dir() and (path / "log.jsonl").is_file()
 
 
-# Layout:
-#   ~/.spindle/<ns>/threads/<id>-<slug>/                     active and inactive threads
-#   ~/.spindle/<ns>/threads/archived/YYYY-MM/<id>-<slug>/    merged, completed, dropped
+# Layout (<store> is ~/.spindle, or <project>/.spindle in project scope):
+#   <store>/<ns>/threads/<id>-<slug>/                        active and inactive threads
+#   <store>/<ns>/threads/archived/YYYY-MM/<id>-<slug>/       merged, completed, dropped
 # The default namespace is an explicit folder, default/. Thread folders are
 # always <id>-<slug>, so none can be named "archived".
 DEFAULT_NAMESPACE = "default"
@@ -156,7 +158,7 @@ def _threads_dir(thread: Path) -> Path:
     """The <root>/<ns>/threads directory a thread folder lives under. Checked
     structurally, up to the store's own .git, so a namespace or slug that
     happens to be called "threads" can't be mistaken for it."""
-    for ancestor in reversed(thread.parents):
+    for ancestor in thread.parents:  # nearest first: a store can sit under any folder named "threads"
         if ancestor.name == "threads" and (ancestor.parent.parent / ".git").exists():
             return ancestor
     raise ThreadError(f"not inside a thread store: {thread}")

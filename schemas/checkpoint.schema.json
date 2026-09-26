@@ -49,6 +49,10 @@
       "type": "string",
       "enum": ["merge", "pivot", "complete", "drop", "close", "reanchor"]
     },
+    "metadata": {
+      "description": "thread.yml as it stood when the checkpoint was written: the baseline the view diffs against for its 'thread.yml since the last checkpoint' line. Absent in checkpoints written before 09-25.",
+      "$ref": "thread.schema.json"
+    },
     "project-head": {
       "description": "HEAD of the project containing the threads root, when that parent is a Git repository.",
       "type": "string",

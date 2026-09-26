@@ -64,12 +64,12 @@ def exercised(root, make_thread, run, origin, body, tmp_path):
 
     (path / "docs" / "guide.md").write_text("# guide", encoding="utf-8")
     assert run(
-        "register", identifier, "docs/guide.md", "--kind", "guide", "--purpose", "orientation",
+        "register", identifier, "docs/guide.md", "--kind", "doc", "--purpose", "orientation",
         "--read-when", "before checkpointing", "--root", root,
     ).code == 0
     (path / "artifacts" / "report.md").write_text("# report", encoding="utf-8")
     assert run(
-        "register", identifier, "artifacts/report.md", "--kind", "report",
+        "register", identifier, "artifacts/report.md", "--kind", "artifact",
         "--purpose", "the write-up", "--root", root,
     ).code == 0
 
@@ -165,9 +165,9 @@ def exercised_phase_two(root, make_thread, run, origin, body, tmp_path):
     child_path = store.resolve_thread(root, child)
     (child_path / "docs" / "guide.md").write_text("# guide", encoding="utf-8")
     (child_path / "artifacts" / "data.csv").write_text("a\n1\n", encoding="utf-8")
-    assert run("register", child, "docs/guide.md", "--kind", "guide", "--purpose", "orientation",
+    assert run("register", child, "docs/guide.md", "--kind", "doc", "--purpose", "orientation",
                "--read-when", "before merging", "--root", root).code == 0
-    assert run("register", child, "artifacts/data.csv", "--kind", "dataset",
+    assert run("register", child, "artifacts/data.csv", "--kind", "artifact",
                "--purpose", "the numbers", "--root", root).code == 0
     assert run("task", "add", child, "carry this to the parent", "--root", root).code == 0
     for identifier in (child, grandchild, parent):

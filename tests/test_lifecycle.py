@@ -12,7 +12,7 @@ import yaml
 
 from conftest import git
 
-from spindle import events, lifecycle, store
+from spindle import events, lifecycle, metadata, store, summary
 
 PARENT_BODY = "Parent synthesis.\n\n## Status\nThe parent holds.\n"
 CHILD_BODY = "Child synthesis.\n\nA second outline line.\n\n## Status\nThe child is done.\n"
@@ -64,11 +64,11 @@ def loaded(root, run, body, make_thread):
     (path / "docs" / "guide.md").write_text("# how to work on this\n", encoding="utf-8")
     (path / "artifacts" / "kept.csv").write_text("a,b\n1,2\n", encoding="utf-8")
     (path / "artifacts" / "left.csv").write_text("c,d\n3,4\n", encoding="utf-8")
-    assert run("register", child, "docs/guide.md", "--kind", "guide", "--purpose", "orientation",
+    assert run("register", child, "docs/guide.md", "--kind", "doc", "--purpose", "orientation",
                "--read-when", "before touching the harness", "--root", root).code == 0
-    assert run("register", child, "artifacts/kept.csv", "--kind", "dataset",
+    assert run("register", child, "artifacts/kept.csv", "--kind", "artifact",
                "--purpose", "the numbers that matter", "--root", root).code == 0
-    assert run("register", child, "artifacts/left.csv", "--kind", "dataset",
+    assert run("register", child, "artifacts/left.csv", "--kind", "artifact",
                "--purpose", "intermediate output", "--root", root).code == 0
     for text in ("roll this one up", "leave this one", "and this one"):
         assert run("task", "add", child, text, "--root", root).code == 0
@@ -156,7 +156,7 @@ def test_merge_copies_points_rolls_up_and_commits_once(root, run, body, loaded):
     assert [e["type"] for e in after[len(before):]] == ["merged-into", "state-changed"]
     assert after[-2]["payload"] == {"parent": parent, "checkpoint": "c0002"}
     assert after[-1]["payload"] == {"from": "active", "to": "merged"}
-    assert yaml.safe_load((archived / "thread.yml").read_text())["state"] == "merged"
+    assert events.state(archived)["state"] == "merged"
 
     # Exactly one new commit, touching both folders.
     log = git(root, "log", "--oneline").splitlines()
@@ -174,8 +174,8 @@ def test_merge_index_renders_pointers_as_arrows(root, run, body, loaded):
     assert run("merge", child, "--promote", "docs/guide.md", "--body", body(_merge_text(child)),
                "--root", root).code == 0
     index = (loaded["parent_path"] / "index.md").read_text(encoding="utf-8")
-    assert f"- → **{child}:artifacts/left.csv** (dataset) — intermediate output" in index
-    assert "- **docs/guide.md** (guide) — orientation" in index
+    assert f"- → **{child}:artifacts/left.csv** — intermediate output" in index
+    assert "- **docs/guide.md** — orientation" in index
 
 
 def test_merge_refuses_a_thread_with_no_parent(root, run, body, make_thread):
@@ -216,8 +216,8 @@ def test_merge_refuses_open_grandchildren_and_force_reparents_them(root, run, bo
     adopted = [e for e in _log(family["parent_path"]) if e["type"] == "child-adopted"]
     assert adopted[0]["payload"]["child"] == grandchild
     # Both folds agree the grandchild now hangs off the parent.
-    assert yaml.safe_load((moved / "thread.yml").read_text())["parent"] == family["parent"]
-    children = yaml.safe_load((family["parent_path"] / "thread.yml").read_text())["children"]
+    assert metadata.read(moved)["parent"] == family["parent"]
+    children = summary.children(root, family["parent"])
     assert {child["id"] for child in children} == {family["child"], grandchild}
     merged = [e for e in _log(family["parent_path"]) if e["type"] == "child-merged"][0]
     assert merged["payload"]["forced"] is True
@@ -408,7 +408,7 @@ def solo(root, run, body, make_thread):
 
 
 def _state(root, identifier):
-    return yaml.safe_load((store.resolve_thread(root, identifier) / "thread.yml").read_text())["state"]
+    return events.state(store.resolve_thread(root, identifier))["state"]
 
 
 def test_complete_refuses_a_subthread_and_points_to_merge(root, run, family):
@@ -484,9 +484,8 @@ def test_drop_on_a_subthread_archives_it_and_tells_the_parent(root, run, family)
 
     # The drop changes the parent's picture: it counts as work since the
     # parent's checkpoint, shows in the list, and in the subthread row.
-    parent = yaml.safe_load((family["parent_path"] / "thread.yml").read_text())
-    assert parent["events-since-checkpoint"] == 1
-    assert parent["children"][0]["state"] == "dropped"
+    assert events.state(family["parent_path"])["events-since-checkpoint"] == 1
+    assert summary.children(root, family["parent"])[0]["state"] == "dropped"
     view = run("view", family["parent"], "--root", root).out
     assert "**1 event since the last checkpoint**" in view
     assert f"child-dropped by s1: child={family['child']}" in view
@@ -510,7 +509,7 @@ def test_drop_refuses_unfinished_children_and_force_reparents_them(root, run, bo
 
     assert run("drop", family["child"], "--force", "--root", root).code == 0
     moved = store.resolve_thread(root, grandchild)
-    assert yaml.safe_load((moved / "thread.yml").read_text())["parent"] == family["parent"]
+    assert metadata.read(moved)["parent"] == family["parent"]
 
 
 def test_drop_refuses_a_root_with_unfinished_children_even_forced(root, run, family):
@@ -539,7 +538,7 @@ def test_reopen_brings_back_a_dropped_subthread(root, run, family):
     assert _state(root, family["child"]) == "active"
     reopened = [e for e in _log(family["parent_path"]) if e["type"] == "child-reopened"]
     assert reopened[0]["payload"] == {"child": family["child"]}
-    children = yaml.safe_load((family["parent_path"] / "thread.yml").read_text())["children"]
+    children = summary.children(root, family["parent"])
     assert children[0]["state"] == "active"
     assert git(root, "log", "--oneline").splitlines()[0].endswith(
         f"reopen {family['child']}@c0001: Child synthesis."
@@ -576,7 +575,7 @@ def test_legacy_open_and_closed_states_fold_to_the_new_names(root, run, solo, fa
                 "by": {"session": "old", "agent": "old"}, "type": "state-changed",
                 "payload": {"from": "open", "to": to, "reason": reason},
             }) + "\n")
-        return events.regenerate(path)["state"]
+        return events.state(path)["state"]
 
     path = store.resolve_thread(root, solo)
     assert legacy(path, "closed", "closed") == "completed"
@@ -652,11 +651,13 @@ def test_reanchor_replaces_the_origin_in_place_and_marks_the_history(root, run, 
     assert value["after-checkpoint"] == "c0001"
     assert (path / "origin-1.md").read_text(encoding="utf-8") == before
 
-    metadata, _ = store.parse_frontmatter((path / "origin.md").read_text(encoding="utf-8"))
-    assert metadata["thread"] == family["child"]
-    assert metadata["parent"] == family["parent"]
-    assert metadata["title"] == "A wider child"
-    assert metadata["previous"] == "origin-1.md"
+    front, _ = store.parse_frontmatter((path / "origin.md").read_text(encoding="utf-8"))
+    assert front["thread"] == family["child"]
+    assert front["previous"] == "origin-1.md"
+    # The origin is narrative; the title and parent live in thread.yml.
+    assert "title" not in front and "parent" not in front
+    assert metadata.read(path)["title"] == "A wider child"
+    assert metadata.read(path)["parent"] == family["parent"]
     assert value["checkpoint"] == "c0002"
     assert "## Previous origin" in (path / "origin.md").read_text(encoding="utf-8")
     replaced = _log(path)[-2]
@@ -684,7 +685,7 @@ def test_link_is_one_sided_and_renders_in_both_directions(root, run, make_thread
 
     result = run("link", first, "related", second, "--root", root)
     assert result.code == 0, result.err
-    assert yaml.safe_load((first_path / "thread.yml").read_text())["links"] == [
+    assert events.state(first_path)["links"] == [
         {"kind": "related", "target": second}
     ]
     assert all(event["type"] != "linked" for event in _log(second_path))
@@ -695,7 +696,7 @@ def test_link_is_one_sided_and_renders_in_both_directions(root, run, make_thread
     )
 
     assert run("unlink", first, "related", second, "--root", root).code == 0
-    assert yaml.safe_load((first_path / "thread.yml").read_text())["links"] == []
+    assert events.state(first_path)["links"] == []
 
 
 def test_supersede_is_retired_and_names_both_replacements(root, run, family):
