@@ -41,9 +41,9 @@ Project: `<project>/.spindle`. The project is the git repository the launch
 folder is in (its main checkout, so worktrees share one store), or the launch
 folder itself outside git. The launch folder is `SPINDLE_PROJECT` (the Claude
 Code hook and the pi extension set it at session start) or else the current
-directory. The first `thread create` in a project
-starts its store and adds `**/.spindle/` to the user's global git ignore, never
-the project's own `.gitignore`.
+directory. The first `thread create` in a project starts its store and adds
+`**/.spindle/` to the user's global git ignore, never the project's own
+`.gitignore`.
 
 Your identity comes from `THREAD_SESSION` and `THREAD_AGENT` (optional), or from
 `--by session/agent` on any command. Without `THREAD_SESSION` the tool falls
@@ -118,9 +118,10 @@ merge or drop `--force` moves a subthread up), so comments and flag order
 survive. Hand edits aren't events. The view page shows them as a line under the
 banner, "thread.yml since the last checkpoint: title, parent changed; 2 flags
 changed", diffed against the `metadata:` block of the latest checkpoint (before
-the first checkpoint, the `created` event). Built-in fields are named and flags are counted. The line is not
-activity: it doesn't add to the event count and doesn't wake an inactive thread.
-The view lists the flags on one line under the title.
+the first checkpoint, the `created` event). Built-in fields are named and flags
+are counted. The line is not activity: it doesn't add to the event count and
+doesn't wake an inactive thread. The view lists the flags on one line under the
+title.
 
 ### reading-guide.md
 
@@ -160,10 +161,10 @@ shows only a count of them, with a line pointing to index.md.
 Every event has an id, a timestamp, who did it, a type, and a payload. Types
 include: `created`, `claim`, `release`, `note`, task changes, `register`,
 `checkpoint`, `origin-revised`, `origin-replaced`, `linked`, `unlinked`,
-`state-changed`, `merged-into`, `reopened`, `reparented`, and the
-parent-side `child-created`, `child-merged`, `child-dropped`, `child-reopened`,
-and `child-adopted`. The `child-*` events and `reparented` are history (the
-view's arc and counts use them); the subthreads list comes from the children's
+`state-changed`, `merged-into`, `reopened`, `reparented`, and the parent-side
+`child-created`, `child-merged`, `child-dropped`, `child-reopened`, and
+`child-adopted`. The `child-*` events and `reparented` are history (the view's
+arc and counts use them); the subthreads list comes from the children's
 thread.yml.
 
 "Events since the last checkpoint" counts every event after the latest
