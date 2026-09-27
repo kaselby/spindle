@@ -672,6 +672,26 @@ def test_reanchor_replaces_the_origin_in_place_and_marks_the_history(root, run, 
     assert "*Replaced " in view and "Earlier origins: origin-1.md.*" in view
     assert "- — origin replaced after c0001 (previous: origin-1.md) —" in view
 
+
+def test_reanchor_accepts_any_heading_the_origin_check_accepts(root, run, body, tmp_path, family):
+    # The origin check reads a heading as the text after "## ", trimmed, so the
+    # step that moves Previous origin to the end has to find it the same way.
+    path = family["child_path"]
+    new_origin = _write(
+        tmp_path, "reanchor-origin.md",
+        "##  Previous origin  \nIt used to be narrower.\n\n## Context & Motivation\nThe work, framed as if new.\n",
+    )
+    result = run(
+        "reanchor", family["child"], "--origin", new_origin, "--title", "A wider child",
+        "--body", body(CHILD_BODY), "--root", root, "--json",
+    )
+    assert result.code == 0, result.err
+    text = (path / "origin.md").read_text(encoding="utf-8")
+    assert text.count("Previous origin") == 1
+    assert text.index("## Context & Motivation") < text.index("## Previous origin")
+    assert "It used to be narrower." in text.split("## Previous origin", 1)[1]
+
+
     revision = _write(tmp_path, "new-revision.md", "The new origin narrowed again.\n")
     assert run("revise", family["child"], revision, "--root", root).code == 0
     assert _log(path)[-1]["payload"] == {"revision": 1}

@@ -499,7 +499,10 @@ def _previous_origin_last(body: str, pointer: str) -> str:
     """Move `## Previous origin` to the end of the origin and add the tool's
     pointer line, so the standalone sections always come first."""
     lines = body.rstrip("\n").splitlines()
-    start = next(i for i, line in enumerate(lines) if line.strip() == "## Previous origin")
+    # Match headings the way the origin check does (cli.py), or a heading it
+    # accepted, such as "##  Previous origin", isn't found here.
+    start = next(i for i, line in enumerate(lines)
+                 if line.startswith("## ") and line[3:].strip() == "Previous origin")
     end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
     section = [line for line in lines[start + 1 : end]]
     rest = (lines[:start] + lines[end:])
