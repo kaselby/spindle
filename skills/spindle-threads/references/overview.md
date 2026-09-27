@@ -55,8 +55,8 @@ git with the next commit.
   note) makes it active again. The session-start index lists inactive threads
   separately.
 - **merged**, **completed**, **dropped:** the thread has ended. It moves to
-  `threads/archived/<month>/` and drops out of the index. `thread reopen` brings
-  it back.
+  `threads/archived/<month>/` and drops out of the index, but `thread view <id>`
+  still opens it. `thread reopen` brings it back.
 
 ## Subthreads
 
