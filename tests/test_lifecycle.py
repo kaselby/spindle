@@ -289,7 +289,7 @@ def test_merge_without_body_prints_the_template(root, run, loaded):
     assert result.code == 2 and result.err == ""
     template = result.out
     assert f"thread merge {child} --body <file> --promote docs/guide.md --tasks {loaded['tasks'][0]}" in template
-    assert "merging.md" in template
+    assert "completion-and-merging.md" in template
     # The headline is suggested and is the only line before ## From.
     before = store.strip_comments(template).split(f"## From {child}")[0]
     assert [line for line in before.splitlines() if line.strip()] == [f"Merged {child}: Child synthesis."]
@@ -336,7 +336,7 @@ def test_merge_validates_an_authored_body(root, run, body, family):
     def refused(text):
         result = run("merge", child, "--body", body(text), "--root", root)
         assert result.code == 2
-        assert "merging.md" in result.err
+        assert "completion-and-merging.md" in result.err
         assert not written.exists()
         return result.err
 
@@ -427,7 +427,7 @@ def test_complete_refuses_a_subthread_and_points_to_merge(root, run, family):
     result = run("complete", family["child"], "--root", root)
     assert result.code == lifecycle.HAS_PARENT
     assert f"`thread merge {family['child']}`" in result.err
-    assert "merging.md" in result.err
+    assert "completion-and-merging.md" in result.err
     assert f"`thread drop {family['child']}`" in result.err
     # Nothing happened.
     assert _state(root, family["child"]) == "active"
@@ -439,7 +439,7 @@ def test_complete_requires_a_clean_checkpoint(root, run, solo):
     result = run("complete", solo, "--root", root)
     assert result.code == lifecycle.DIRTY
     assert result.err.startswith(f"can't complete yet: {solo} has 1 event since its last checkpoint")
-    assert "lifecycle.md" in result.err
+    assert "completion-and-merging.md" in result.err
 
 
 def test_complete_archives_a_top_level_thread(root, run, solo):

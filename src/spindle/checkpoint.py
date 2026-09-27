@@ -15,7 +15,7 @@ _HEADING = re.compile(r"^##\s+(.+?)\s*$")
 _PROVENANCE = re.compile(r"\(from (c\d{4})\)$")
 
 
-def _refuse(problem: str, doc: str = "checkpointing.md") -> ThreadError:
+def _refuse(problem: str, doc: str = "checkpoints.md") -> ThreadError:
     return ThreadError(f"{problem} ({guide.doc(doc)})")
 
 
@@ -73,21 +73,21 @@ def _sections(text: str) -> tuple[str, str, str | None]:
             f"{LIMITS['headline_chars']} characters, then a few sentences"
         )
     headline = next((line.strip() for line in lines[:first_heading] if line.strip()), "")
-    _check_headline(headline, "checkpointing.md", "the outline below it")
+    _check_headline(headline, "checkpoints.md", "the outline below it")
     if len(outline) > LIMITS["outline_chars"]:
         raise _refuse(
             f"checkpoint outline (everything before the first ## heading) is {len(outline)} characters; "
             f"the limit is {LIMITS['outline_chars']}. Keep it to a few sentences and move detail into ## Status"
         )
     found = _headings(lines)
-    status = _status(found, lines, "checkpointing.md",
+    status = _status(found, lines, "checkpoints.md",
                       missing="where things stand against the origin, what's open, what's next",
                       empty="say where things stand, what's open, and what's next")
     inherited = _section(lines, found["inherited"]) or None if "inherited" in found else None
     return outline, status, inherited
 
 
-def _inherited_items(inherited_text: str | None, doc: str = "checkpointing.md") -> list[dict[str, str]]:
+def _inherited_items(inherited_text: str | None, doc: str = "checkpoints.md") -> list[dict[str, str]]:
     items: list[dict[str, str]] = []
     if not inherited_text:
         return items
@@ -163,7 +163,7 @@ def parse_merge_body(text: str, child_id: str) -> dict[str, Any]:
     """A merge checkpoint: headline, `## From <child>`, `## Status`, optional
     `## Inherited`. The From narrative is the author's; the tool appends its
     facts when it writes the file (see create's ``merge_facts``)."""
-    doc = "merging.md"
+    doc = "completion-and-merging.md"
     source = strip_comments(text).strip()
     lines = source.splitlines()
     first_heading = next((i for i, line in enumerate(lines) if line.startswith("## ")), len(lines))

@@ -297,7 +297,7 @@ def _validate_origin(body: str, *, reanchoring: bool = False) -> None:
         if not found.get(name):
             raise ThreadError(
                 f"the origin needs a non-empty `## {name}` section. `thread create --template` prints "
-                f"the template ({guide.doc('thread-creation.md')})."
+                f"the template ({guide.doc('creating-a-thread.md')})."
             )
     # A reanchored origin is written as if the thread were
     # created today, plus one short section on the change, pointing back.
@@ -307,7 +307,7 @@ def _validate_origin(body: str, *, reanchoring: bool = False) -> None:
             raise ThreadError(
                 f"a reanchored origin needs a short `## {PREVIOUS_ORIGIN}` section at the end: what the "
                 f"earlier framing was, what changed, and why. The tool adds the pointer to the old file. "
-                f"Write the rest as if the thread were created today ({guide.doc('lifecycle.md')})."
+                f"Write the rest as if the thread were created today ({guide.doc('changing-direction.md')})."
             )
         limit = LIMITS["previous_origin_chars"]
         if len(text) > limit:
@@ -497,7 +497,7 @@ def run(args: argparse.Namespace) -> None:
             "`thread close` is gone: a thread now ends as completed or dropped, so the archive shows "
             "which. `thread complete <id>` if the work is done (a subthread merges instead: "
             "`thread merge <id>`); `thread drop <id>` if it isn't worth pursuing "
-            f"({guide.doc('lifecycle.md')})."
+            f"({guide.doc('completion-and-merging.md')})."
         )
     if command == "supersede":
         raise ThreadError(

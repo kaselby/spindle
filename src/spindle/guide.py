@@ -77,7 +77,7 @@ def origin_template(command: str) -> str:
         f"<!-- Origin template. Fill it in, save it to a file, and run:\n"
         f"       {command}\n"
         f"     The origin is the thread's fixed point: every checkpoint is measured against it.\n"
-        f"     Comment lines like this one are ignored. Guide: {doc('thread-creation.md')}. -->\n\n"
+        f"     Comment lines like this one are ignored. Guide: {doc('creating-a-thread.md')}. -->\n\n"
         + ORIGIN_TEMPLATE
     )
 
@@ -90,7 +90,7 @@ def reanchor_origin_template(command: str) -> str:
         f"     Write it as if the thread were being created today: self-contained, not in reference\n"
         f"     to the old origin. Quote original words again if they're still the reason for the work.\n"
         f"     Only the last section talks about the change.\n"
-        f"     Comment lines like this one are ignored. Guide: {doc('lifecycle.md')}. -->\n\n"
+        f"     Comment lines like this one are ignored. Guide: {doc('changing-direction.md')}. -->\n\n"
         + ORIGIN_TEMPLATE.rstrip("\n")
         + "\n\n## Previous origin\n"
         "<!-- Required, at most 500 characters. A few sentences: what the earlier framing was, what\n"
@@ -127,7 +127,7 @@ def checkpoint_template(thread_id: str, recent: list[dict[str, Any]],
     return (
         f"<!-- Checkpoint template for {thread_id}. Fill it in, save it to a file, and run:\n"
         f"       {command}{at_line}{replaces}\n"
-        f"     Comment lines like this one are ignored. Guide: {doc('checkpointing.md')}. -->\n\n"
+        f"     Comment lines like this one are ignored. Guide: {doc('checkpoints.md')}. -->\n\n"
         f"{events_block}"
         f"<!-- First line: a headline, at most {LIMITS['headline_chars']} characters.\n"
         f"     Then a few sentences of outline. Headline and outline together: at most "
@@ -190,7 +190,7 @@ def merge_template(child_id: str, parent_id: str, parent_checkpoint: str, comman
         f"       {command}\n"
         f"     This becomes {parent_id}'s next checkpoint, replacing {parent_checkpoint} as its current "
         f"state,\n     so write it in full. Comment lines like this one are ignored. "
-        f"Guide: {doc('merging.md')}. -->\n\n"
+        f"Guide: {doc('completion-and-merging.md')}. -->\n\n"
         f"<!-- First line: the headline, at most {LIMITS['headline_chars']} characters, and nothing else "
         f"before `## From {child_id}`.\n     A suggestion is filled in; say what the merge brought. -->\n"
         f"{suggested}\n\n"
