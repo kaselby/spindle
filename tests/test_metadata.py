@@ -280,7 +280,7 @@ def test_the_view_shows_the_reading_guide_before_the_docs(root, make_thread, run
     path = store.resolve_thread(root, identifier)
     missing = run("view", identifier, "--root", root).out
     assert "# Reading guide" not in missing
-    assert f"*No reading guide. For pointers and a reading order, `thread reading-guide {identifier}` prints the template.*" in missing
+    assert "reading guide" not in missing.lower()  # no guide, no mention of one
 
     (path / "reading-guide.md").write_text(
         "<!-- the rule, hidden -->\n1. `docs/plan.md` first.\n2. Then ~/Git/Spindle on branch main.\n",
@@ -290,25 +290,8 @@ def test_the_view_shows_the_reading_guide_before_the_docs(root, make_thread, run
     guide_at = view.index("# Reading guide\n1. `docs/plan.md` first.\n2. Then ~/Git/Spindle on branch main.")
     assert guide_at < view.index("# Docs and artifacts")
     assert "the rule, hidden" not in view
-    assert "No reading guide" not in view
     # Not registered, not in the index.
     assert "reading-guide" not in (path / "index.md").read_text(encoding="utf-8")
-
-
-def test_reading_guide_prints_the_template_then_the_size(root, make_thread, run):
-    identifier = make_thread()
-    path = store.resolve_thread(root, identifier)
-    template = run("reading-guide", identifier, "--root", root)
-    assert template.code == 0
-    first = template.out.splitlines()[0]
-    assert first.startswith("<!-- Where to look and in what order")
-    assert "never status, next steps or handoff notes (those go in the checkpoint)" in first
-    assert f"Save it as {path / 'reading-guide.md'}" in template.out
-    assert not (path / "reading-guide.md").exists()  # printing it writes nothing
-
-    (path / "reading-guide.md").write_text("1. `docs/a.md`\n", encoding="utf-8")
-    shown = run("reading-guide", identifier, "--root", root)
-    assert f"{path / 'reading-guide.md'} (14 of 1,500 characters)" in shown.out
 
 
 def test_doctor_checks_the_reading_guides_cap_and_local_paths(root, make_thread, run, tmp_path):

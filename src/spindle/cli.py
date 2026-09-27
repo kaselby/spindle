@@ -263,11 +263,6 @@ def parser() -> argparse.ArgumentParser:
     listing.add_argument("--ns", help="only this namespace; `default` means threads created without one")
     _common(listing, identity=True, data=True)
 
-    reading = commands.add_parser(
-        "reading-guide", help="where the thread's optional reading guide goes; prints the template if there's none yet")
-    reading.add_argument("thread")
-    _common(reading, identity=True, data=True)
-
     migrate = commands.add_parser(
         "migrate", help="one-time: move every thread's metadata into thread.yml (safe to run again)")
     migrate.add_argument("--dry-run", action="store_true", help="say what would change; write nothing")
@@ -590,20 +585,6 @@ def run(args: argparse.Namespace) -> None:
             _emit(value, as_json=True)
         else:
             _emit(render.view(root, thread, deep=args.deep))
-    elif command == "reading-guide":
-        where = thread / guide.READING_GUIDE
-        cap = LIMITS["reading_guide_chars"]
-        if where.is_file():
-            size = len(strip_comments(where.read_text(encoding="utf-8")).strip())
-            value = {"path": str(where), "exists": True, "chars": size, "cap": cap}
-            text = (
-                f"{where} ({size:,} of {cap:,} characters{', over the cap' if size > cap else ''}). "
-                f"Edit it directly; `thread view {identifier}` shows it.\n"
-            )
-        else:
-            value = {"path": str(where), "exists": False, "cap": cap}
-            text = guide.reading_guide_template(identifier, str(where))
-        _emit(value if args.json else text, as_json=args.json)
     elif command == "merge":
         value = lifecycle.merge(
             root, thread, by, promote=args.promote, task_ids=args.tasks,

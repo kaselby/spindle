@@ -439,13 +439,8 @@ def view(root: Path, thread: Path, *, deep: bool = False) -> str:
         # errors="replace": a stray non-UTF-8 byte shows as U+FFFD instead of failing the view.
         text = reading_path.read_text(encoding="utf-8", errors="replace")
         reading = ["# Reading guide", guide.strip_comments(text).strip(), ""]
-        docs_intro: list[str] = []
     else:
         reading = []
-        docs_intro = [
-            f"*No reading guide. For pointers and a reading order, `thread reading-guide {identifier}` "
-            "prints the template.*"
-        ]
     return "\n".join([
         *title_block, *banner, "",
         "# Origin: why this exists", *origin_history, origin_text, "",
@@ -459,7 +454,7 @@ def view(root: Path, thread: Path, *, deep: bool = False) -> str:
         "# Who's working", *(claim_rows or ["- Nobody."]), "",
         "# Open tasks", *task_rows, "",
         *reading,
-        "# Docs and artifacts", *docs_intro, *_index_body(thread), "",
+        "# Docs and artifacts", *_index_body(thread), "",
         "# Related threads", *(around or ["- None."]),
     ]).replace("\n\n\n", "\n\n") + "\n"
 
