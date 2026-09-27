@@ -9,23 +9,18 @@ description: >
 
 # Threads
 
-Threads are a memory feature designed around tracking ongoing work and offloading it to disk. The system is designed around rapid, frictionless reorientation, so any new agent session can immediately reorient on where the work has been left and pick up right where it left off without expensive orientation or lossy summarization.
+Threads are a memory feature for tracking ongoing work and offloading it to
+disk. The system is designed around rapid, frictionless reorientation, so any
+new agent session can immediately reorient on where the work has been left and
+pick up right where it left off without expensive orientation or lossy
+summarization.
 
-One thread corresponds to one ongoing stream of work. A single task that can be accomplished in a few simple steps is not a thread. Threads can nest and contain subthreads. They can merge into parent threads when complete, or flow into new threads when they undergo fundamental changes.
+One thread corresponds to one ongoing stream of work. A single task that can be
+accomplished in a few simple steps is not a thread. Threads can nest and contain
+subthreads. They can merge into parent threads when complete, or flow into new
+threads when they undergo fundamental changes.
 
-Threads live in a store, its own git repo: `~/.spindle/`, or
-`<project>/.spindle/` if setup chose per-project stores (the session-start
-snapshot names the store it shows). In a project with no store yet, the first
-`thread create` starts one.
-
-```
-~/.spindle/
-  default/                 the default namespace; other namespaces sit beside it
-    threads/               one folder per active thread
-      archived/YYYY-MM/    threads that have ended, by the month they ended
-```
-
-Concretely, a thread is a folder under `<store>/<namespace>/threads/`:
+Concretely, a thread is a folder:
 
 ```
 k7q2m9-latency-regression/
@@ -41,140 +36,118 @@ k7q2m9-latency-regression/
   reading-guide.md  optional: where to look and in what order, for a newcomer
 ```
 
-The `thread` cli is used to interact with threads, and contains automated
+The `thread` CLI is used to interact with threads, and contains automated
 features for logging and event tracking. Thread files generally shouldn't be
 edited directly - use the tool instead. The exceptions are docs/artifacts and
-the reading-guide (if applicable), and if you need to add flags to `thread.yml`.
+the reading guide (if applicable), and if you need to add flags to `thread.yml`.
 
-Every action on a thread (a claim, a note, a task, a checkpoint) is recorded
-as an **event** with an id, in the thread's log.
+Every action on a thread (a claim, a note, a task, a checkpoint) is recorded as
+an **event** with an id, in the thread's log.
 
-## Picking up a thread
+For further details on general thread structure, lifecycle, storage, events, and
+tools, read `references/overview.md`.
 
-1. **Read it:** `thread view <id>`. The page shows the origin, one line per
-   past checkpoint, the latest checkpoint, recent activity, subthreads, who's
-   working, open tasks, the reading guide if there is one, and the docs worth
-   reading. Read the origin first, because everything else is measured
-   against it.
-2. **Claim it:** `thread claim <id> --intent "what you're doing"`. This tells
-   other sessions you're here. It doesn't lock anything, and it lasts until
-   you release it or go 4 hours without activity. `thread create` claims
-   the new thread for you.
-3. **Work**, recording things as you go (see below).
-4. **Checkpoint** when the state of the work changes in a way the next
-   session would need to know, and before you stop. See below.
-5. **Release:** `thread release <id>`. If you've recorded more than three
-   events since your last checkpoint, it asks for a checkpoint first. You
-   can pass `--skip "reason"` instead, and the reason is shown to the next
-   session.
+## How to use threads
 
-## Checkpoints
+### When starting work
 
-A checkpoint captures the current state of the thread. It acts like a commit, capturing the changes that have been made to the thread, as well as documenting where the work currently sits, what's next on the horizon, and anything a future session needs to know to continue from here.
+Check if there is already a thread for what you want to do (from the index at
+startup or using `thread list`). If so:
 
-Checkpoints should be rewritten whenever any major changes happen to the thread - changes in thread state, merging children, pivots or origin changes, major milestones completed. The `thread` tool will suggest creating a new checkpoint periodically if it has been awhile since the last checkpoint - this isn't mandatory, it's just a gentle reminder. Don't write one after every small task is completed.
+1. **Orient** via `thread view <id>`. This shows a summary of the thread
+   structured for fast orientation. Follow whatever pointers you need to get up
+   to speed.
+2. **Claim** the thread via `thread claim <id> --intent "what you're doing"`.
+   This is a nonexclusive claim that tells other agents what you are working on.
 
-`thread checkpoint <id>` with no body prints the template. Write the body
-to a file and run `thread checkpoint <id> body.md`. **Read
-[checkpointing](references/checkpointing.md) before your
-first checkpoint in a session.**
+If there is no existing thread for what you're doing, and the task is large
+enough to be worth tracking, **create a thread.** Read
+`references/creating-a-thread.md`.
 
-Write the body in scratch, it's copied into checkpoints by the tool.
+If you're starting new work that is a subset of an existing thread, create a new
+subthread. Read `references/creating-a-thread.md`.
 
+### While working on a thread
 
-## Starting new work
+As you work, make sure to keep the thread updated.
 
-Before creating anything, check `thread list`. The work may already have a
-home.
+1. Use `thread task` to record individual tasks that aren't large enough to need
+   their own subthread.
+2. Use `thread note` to record observations you want to persist that don't need
+   to go in a full doc. Notes stay in the log (`thread replay`) but aren't shown
+   on the view page.
+3. If your work creates artifacts which should be persisted in the thread (such
+   as experiment harnesses, research reports, figures, presentations, etc.), use
+   `thread register --kind artifact` to register them as artifacts.
+4. **Write a checkpoint when you reach a milestone.** Checkpoints are like
+   commits. They act as a snapshot of the current state that can be read or
+   replayed by future sessions. Read `references/checkpoints.md` for
+   instructions on writing checkpoints.
 
-- **You'll finish it now and nobody needs to pick it up later:** nothing, or
-  a task on the thread it belongs to.
-- **It's a single stateless step inside an existing thread:** a task.
-- **It's part of an existing thread but needs its own reasoning, or might be
-  handed off:** a subthread. Use `thread promote <parent> <task-id> "title"`
-  if it started as a task, or `thread create "title" --parent <id>`.
-- **It's new and stands on its own:** `thread create "title"`.
+For further details on how to use tasks, when to checkpoint, and what to do when
+threads change direction or grow to encompass new work, read
+`references/working-with-threads.md`.
 
-To decide between a task and a thread, ask whether someone picking this up
-later would need to know why it exists and what's been tried. If they would,
-it's a thread.
+### When wrapping up
 
-For details on thread creation or promotion, read `references/thread-creation.md`.
+If a thread is complete, then it either needs to be merged (for subthreads) or
+completed (for top-level threads). Read `references/completion-and-merging.md`.
 
-## Thread lifecycle
+Note that completing a thread doesn't require every single task to be complete,
+just that the overall goals and motivation for the thread have been met.
 
-A thread is **active** while it's being worked on. After 14 days with no
-activity it becomes **inactive**, and any new activity makes it active again.
+If you are wrapping up your session but the thread is not yet complete, then:
 
-Every thread ends in one of three ways, and each one moves the thread to the
-archive:
+1. In most situations, you should write a checkpoint before you wrap up.
+2. Release your claim with `thread release <id>`. If you haven't checkpointed,
+   the tool will ask for a checkpoint; `--skip "<reason>"` releases without it,
+   and the next session sees the reason.
 
-- **Merged:** a finished subthread, folded into its parent with
-  `thread merge`. This is how its result reaches the parent.
-- **Completed:** a finished thread with no parent, ended with
-  `thread complete`.
-- **Dropped:** decided it isn't worth pursuing, ended with `thread drop`.
-  This works for any thread, subthreads included.
+## Artifacts, docs & reading guides
 
-If new information arises that causes a thread's origin to no longer be accurate, the thread should either be **revised** or **reanchored**. If the overall context and motivation for the work remains largely accurate, use `thread revise` to append a dated revision. If the whole context for the thread shifts but the work carries on, **reanchor** it: `thread reanchor` replaces the origin, writes a checkpoint against the new one, and keeps the tasks, subthreads, and history. If the original question was wrong and the work shouldn't carry on, drop the thread and start a new one.
+While working on the thread you may create artifacts such as scripts, research
+reports, diagrams or figures, presentations, experiment harnesses, etc.
+Throwaways can be left in `scratch/`, but anything that another session might
+need to use or consult should be registered as an artifact.
 
-Threads can be linked to each other with `thread link`: `related`, `blocked-by`, or `continues` (a new thread carrying on an ended one). Links show on the view page. They never block anything.
+Docs act as curated guides and orientation aids, written to help future sessions
+understand what is present, where to find it, and how to use it. As the thread
+grows and more artifacts are registered, consider writing docs to register
+alongside them.
 
-Read [lifecycle](references/lifecycle.md) before completing, dropping,
-revising, reanchoring, or reopening a thread, and
-[merging](references/merging.md) before merging one.
+If you want to leave additional instructions about what should be read first or
+link to resources outside the thread, then you can write
+`<thread>/reading-guide.md`, which will be surfaced during orientation. Docs and
+reading guides shouldn't be used as handoff documents about one task; they
+should hold durable knowledge only.
 
-## Recording as you work
+Artifacts go in `<thread>/artifacts/` and docs go in `<thread>/docs/`. Both are
+registered with `thread register`. The reading guide lives at
+`<thread>/reading-guide.md`; register it with `--kind reading-guide` whenever
+you write or change it.
 
-Apart from checkpoints, there are six places to put things while you work.
-They differ in who will see them.
-
-- **Notes:** `thread note <id> "..."`. Gotchas, small findings, dead ends,
-  observations. Record anything you think might be useful, but doesn't
-  belong in a checkpoint or doc. Notes are kept in the log and are not
-  shown on the view page. Anyone who needs them can search with
-  `thread replay <id> --type note`. 
-- **Tasks:** `thread task add <id> "..."`, then `thread task close <id>
-  <task-id>`. Small, concrete next steps. A task is one line with no history.
-  If one grows its own reasoning, turn it into a subthread with
-  `thread promote`.
-- **Docs:** files in `docs/`, registered with `thread register <id>
-  docs/x.md --kind doc --purpose "..." --read-when "..."`. Guides written for
-  future sessions: how to run the experiments, where the code lives and how it's structured, a reading guide to the research reports, etc... Every doc is listed on the view page with when to read it, so
-  this is how you make sure something gets seen.
-- **Artifacts:** files in `artifacts/`, registered with `thread register <id>
-  artifacts/x --kind artifact --purpose "..."`. Records of what the work
-  produced: results, reports, scripts, diagrams. They're listed on the view
-  page with their purpose. A directory of related files can be registered
-  as one entry.
-- **Reading guide:** `reading-guide.md` at the thread root. Optional
-  orientation guide pointing to what files to read first or linking to
-  resources outside the thread. Not a status document, shouldn't reference
-  next steps or ongoing work. Just pointers on where to find information.
-  Keep it under 1,500 characters; doctor flags a longer one and any local
-  path in it that no longer exists.
-- **Scratch:** `scratch/`. Anything in progress. It isn't tracked or shown to
-  anyone.
-
-The difference between docs and artifacts is that docs are specifically
-written as guidelines or reference material for future sessions. Both are
-registered with `thread register` - `index.md` has a list of all registered
-docs and artifacts.
+Read `references/artifacts-and-docs.md` for additional information.
 
 ## Other sessions
 
-Several sessions can claim and work on the same thread at once. Claims indicate presence and intent, they're not a lock. When working at the same time as other agents, be careful to avoid concurrent edits. 
+Several sessions can claim and work on the same thread at once. Claims indicate
+presence and intent; they're not a lock. When working at the same time as other
+agents, be careful to avoid concurrent edits.
 
-For checkpoints, there's a safeguard in place to ensure that checkpoints don't happen without being aware of work other sessions have done, since checkpoints must capture the full state of the thread. When writing a checkpoint, pass the event id of the latest event you are aware of. If it is stale, the checkpoint will fail. Make sure to replay the log to understand what other sessions have contributed before writing your checkpoint.
+For checkpoints there are additional mechanisms, covered in
+`references/checkpoints.md`.
 
-## Namespaces
+## Thread storage and namespaces
 
-Threads can optionally be grouped into namespaces, for example one per
-agent. Use `thread create --ns <name>`, or set `SPINDLE_NAMESPACE`.
-Subthreads can only be created in their parent's namespace. `thread list`
-shows all namespaces grouped. `--ns <name>` filters to one.
+Threads are stored either globally in `~/.spindle/` (the default) or per
+project. This is configured in `~/.spindle/config.yml`.
 
-Default to not using namespaces unless the user requests it or there is an established convention in place.
+Threads can optionally be grouped into namespaces for organization with
+`thread create --ns <name>`. `thread list` shows all namespaces grouped;
+`--ns <name>` filters to one.
+
+Default to not using namespaces unless the user requests it or there is an
+established convention in place.
 
 ## Commands
 
@@ -186,38 +159,28 @@ Default to not using namespaces unless the user requests it or there is an estab
 | `thread note <id> "text"` | record a finding (not shown on the view page) |
 | `thread task add\|close\|remove\|list <id> ...` | the task list |
 | `thread register <id> <path> --kind doc\|artifact --purpose "..."` | keep a doc (under docs/, needs `--read-when`) or artifact (under artifacts/), a file or a directory. Max 5 MB |
-| `thread reading-guide <id>` | the reading guide's template, or its size against the cap |
+| `thread register <id> reading-guide.md --kind reading-guide` | record that the reading guide was written or changed |
 | `thread checkpoint <id> [body.md] [--at <event-id>]` | write a checkpoint. No body prints the template |
 | `thread create "title" --origin o.md [--parent <id>] [--ns <name>]` | new thread. No `--origin` prints the template |
 | `thread promote <id> <task-id> "title" --origin o.md` | task to subthread |
-| `thread revise` / `reanchor` / `merge` / `complete` / `drop` / `reopen` | see above |
+| `thread merge` / `complete` | finish a thread: `references/completion-and-merging.md` |
+| `thread revise` / `reanchor` / `drop` / `reopen` | change direction: `references/changing-direction.md` |
 | `thread link` / `unlink <id> <kind> <target>` | `related`, `blocked-by`, or `continues`. Display only |
 | `thread replay <id>` | read the log. `--checkpoint cNNNN` or `--checkpoints` shows past checkpoints in full |
 | `thread doctor [<id>]` | check for problems; each finding says what to do |
 
-Flags: `thread <command> --help`. Background on how the system works and
-why: [system/design](references/system/design.md) and
-[system/mechanics](references/system/mechanics.md).
+Flags: `thread <command> --help`.
 
-## Guidelines
+## Thread guidelines
 
-1. **Write for a fresh session.** Threads exist so that a future session can
-   continue your work exactly as if it were you continuing it, with none of
-   your memory. Write origins, checkpoints, docs, and artifacts for that
-   reader: someone who knows only what's on the page.
+1. **Write for a fresh session.** The goal of threads is rapid reorientation.
+   Write accordingly.
+2. **Update as you go.** Keep the thread up to date as you work, don't just wait
+   for the end.
+3. **Threads are internal, not user-facing.** The user should be able to read
+   them if needed, but they are not responsible for curating your threads, and
+   shouldn't be asked for approval about thread changes.
 
-2. **Update as you go.** Keep the thread current while you work, not at the
-   end. A session can end at any point, and whatever wasn't recorded ends
-   with it.
-
-3. **Grow docs as the thread grows.** When a workflow or a piece of setup
-   keeps mattering, write it up as a doc: an orientation guide or a manual.
-   Docs are shown on the view page with a note on when to read them
-   (progressive disclosure), so they give the next session detail without
-   making it read everything up front.
-
-4. **The threads are yours to run.** Threads are an internal tool for you to
-   track your work. A user should be able to read them, but shouldn't need
-   to understand Spindle's structure or curate your threads. Decide the
-   structure yourself: when to start a thread or a subthread, revise or
-   reanchor an origin, merge, or drop. Don't ask the user to approve it.
+If the curated guides aren't enough and you want full documentation on the
+thread system, `references/system/mechanics.md` covers the exact formats and
+rules, and `references/system/design.md` explains why it's built this way.
