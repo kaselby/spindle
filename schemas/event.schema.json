@@ -347,7 +347,7 @@
     {
       "if": { "properties": { "type": { "const": "reparented" } } },
       "then": {
-        "description": "On the MOVED thread, as history: the tool writes the new parent to thread.yml at the same time, and nothing reads the parent from this event (older versions did; `thread migrate` used the last one). No folder moves, since subthreads live flat beside their parents.",
+        "description": "On the MOVED thread, as history: the tool writes the new parent to thread.yml at the same time, and nothing reads the parent from this event (older versions did). No folder moves, since subthreads live flat beside their parents.",
         "properties": { "payload": {
           "type": "object", "additionalProperties": false,
           "required": ["from", "to"],
@@ -369,7 +369,7 @@
     {
       "if": { "properties": { "type": { "const": "migrated" } } },
       "then": {
-        "description": "Written once per thread by `thread migrate` when thread.yml became the metadata file. The payload is the metadata it wrote: the baseline for the view's 'thread.yml since the last checkpoint' line until the next checkpoint. Not work: it counts nowhere as activity and doesn't wake an inactive thread.",
+        "description": "Written once per thread by the old `thread migrate` (since removed) when thread.yml became the metadata file. The payload is the metadata it wrote: the baseline for the view's 'thread.yml since the last checkpoint' line until the next checkpoint. Not work: it counts nowhere as activity and doesn't wake an inactive thread.",
         "properties": { "payload": {
           "type": "object", "additionalProperties": false,
           "required": ["metadata"],

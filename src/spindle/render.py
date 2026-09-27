@@ -517,16 +517,19 @@ def replay(
     ) + "\n"
 
 
-def list_threads(root: Path, paths: list[Path], *, only: str | None = None) -> str:
+def list_threads(root: Path, paths: list[Path], *, only: str | None = None, flags: list[str] | None = None) -> str:
     """Every thread as a tree, grouped by namespace (default first), with a single
     footer. Subthreads are indented under their parent (see tree.py); one line per
     thread with its state, who's working, and events since checkpoint. ``only`` is
-    the namespace `--ns` filtered to, if any.
+    the namespace `--ns` filtered to, if any; ``flags`` the `--flag` filters.
 
     With no namespaced threads there is one group and no heading, as before
     namespaces existed; otherwise every group, the default included, gets one.
     """
     if not paths:
+        if flags:
+            where = f" in namespace {only}" if only is not None else ""
+            return f"No active threads{where} with {', '.join(flags)}. `thread list` shows every active thread.\n"
         if only is not None:
             return f"No active threads in namespace {only}. `thread list` shows every namespace.\n"
         return "No active threads. `thread create \"title\"` prints the origin template to start one.\n"

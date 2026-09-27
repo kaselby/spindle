@@ -42,8 +42,13 @@ flags:                                        # optional: your own keys, scalar 
 """
 
 # Keys only the old cache had. Their presence means the store predates this
-# model and needs `thread migrate`, not a hand fix.
+# model, which this version no longer converts (see OLD_FORMAT).
 _CACHE_KEYS = {"state", "tip", "events-since-checkpoint", "claims", "children", "last-event"}
+
+
+# Where to convert a store from before thread.yml held the metadata. The
+# converter was removed once the known stores were converted.
+OLD_FORMAT = "convert the store with `thread migrate` from an older Spindle (commit 5de08e0 has it)"
 
 
 class MetadataError(ThreadError):
@@ -100,8 +105,7 @@ def _validate(thread: Path, value: Any) -> dict[str, Any]:
     if stale:
         raise MetadataError(
             f"{thread.name}/{FILE} is in the old format, a summary the tool rebuilt from the log "
-            f"(it has {', '.join(stale)}). Run `thread migrate` once to turn every thread's thread.yml "
-            "into its metadata file."
+            f"(it has {', '.join(stale)}). This version can't read that; {OLD_FORMAT}."
         )
     problems: list[str] = []
     result: dict[str, Any] = {}
@@ -165,7 +169,7 @@ def read(thread: Path) -> dict[str, Any]:
         root, relative = _relative(thread)
         restore = (
             f" Restore it: git -C {root} checkout -- {relative}" if _committed(root, relative)
-            else " If this store predates thread.yml as metadata, run `thread migrate`."
+            else " Write one by hand; it should look like this:\n" + "\n".join(f"  {line}" for line in SCHEMA.splitlines())
         )
         raise MetadataError(f"{thread.name} has no {FILE}.{restore}")
     try:
@@ -191,7 +195,7 @@ def dump(value: dict[str, Any]) -> str:
 
 
 def write(thread: Path, value: dict[str, Any]) -> None:
-    """Write the whole file (create and migrate)."""
+    """Write the whole file (create)."""
     atomic_text(path_of(thread), dump(value))
 
 

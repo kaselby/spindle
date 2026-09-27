@@ -7,8 +7,7 @@ import json
 
 import pytest
 
-from conftest import git
-from spindle import events, lifecycle, metadata, store, summary
+from spindle import lifecycle, metadata, store, summary
 
 PARENT_BODY = "Parent synthesis.\n\n## Status\nThe parent holds.\n"
 CHILD_BODY = "Child synthesis.\n\nA second outline line.\n\n## Status\nThe child is done.\n"
@@ -140,31 +139,6 @@ def test_merge_into_a_parent_with_a_bad_thread_yml_writes_nothing(root, run, bod
     assert _logs(root, parent, child) == before
     assert store.is_active(_path(root, child))
     assert not (_path(root, parent) / "checkpoints" / "c0002.md").exists()
-
-
-# ── 3. migrate leaves new-model threads alone ────────────────────────────────
-
-
-def test_migrate_skips_a_thread_created_under_the_new_model(root, run, make_thread):
-    identifier = make_thread("Fresh")
-    git(root, "add", "-A")
-    git(root, "commit", "-m", "baseline")
-    commits = len(git(root, "log", "--oneline").splitlines())
-    types = [event["type"] for event in events.read_events(_path(root, identifier))]
-
-    result = run("migrate", "--root", root, "--json")
-    assert result.code == 0, result.err
-    assert [item["status"] for item in json.loads(result.out)] == ["already migrated"]
-    assert [event["type"] for event in events.read_events(_path(root, identifier))] == types
-    assert len(git(root, "log", "--oneline").splitlines()) == commits
-
-
-def test_migrate_reports_an_invalid_new_model_thread_yml(root, run, make_thread):
-    identifier = make_thread("Fresh")
-    _yml(root, identifier).write_text("titel: Fresh\n", encoding="utf-8")
-    result = run("migrate", "--root", root, "--json")
-    [item] = json.loads(result.out)
-    assert item["status"] == "failed" and "unknown key `titel`" in item["error"]
 
 
 # ── 4. self-parent, cycles, cross-namespace parents ──────────────────────────

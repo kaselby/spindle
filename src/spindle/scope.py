@@ -1,9 +1,12 @@
 """Where the thread store is: one global store, or one per project.
 
 `scope: global | project` in ~/.spindle/config.yml (no file means global).
-global: ~/.spindle. project: <launch folder>/.spindle, where the launch folder
-is SPINDLE_PROJECT (set by the harness plugins at session start), else the
-current directory. --root and SPINDLE_ROOT outrank both.
+global: ~/.spindle. project: <project>/.spindle, where the project is the git
+repository the launch folder is in, or the launch folder itself outside git.
+The launch folder is SPINDLE_PROJECT (set by the harness plugins at session
+start), else the current directory. A linked worktree uses its main checkout,
+so every worktree of a repository shares one store. --root and SPINDLE_ROOT
+outrank all of it.
 """
 
 from __future__ import annotations
@@ -45,9 +48,30 @@ def locate(value: str | Path | None = None) -> tuple[Path, str]:
     if chosen:
         return Path(chosen).expanduser().resolve(), "explicit"
     if scope() == "project":
-        folder = os.environ.get("SPINDLE_PROJECT") or os.getcwd()
-        return Path(folder).expanduser().resolve() / ".spindle", "project"
+        folder = Path(os.environ.get("SPINDLE_PROJECT") or os.getcwd()).expanduser().resolve()
+        return project_of(folder) / ".spindle", "project"
     return GLOBAL_ROOT.expanduser().resolve(), "global"
+
+
+def project_of(folder: Path) -> Path:
+    """The repository ``folder`` is in (its main checkout, for a linked worktree),
+    or ``folder`` itself when it isn't in one or git can't say."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir"],
+            cwd=folder, text=True, capture_output=True, check=False,
+        )
+    except OSError:  # no git, or the folder is gone
+        return folder
+    lines = result.stdout.splitlines()
+    if result.returncode != 0 or len(lines) != 2:
+        return folder  # not in a repository, or inside .git or a bare one
+    top, common = Path(lines[0]), Path(lines[1])
+    # A linked worktree's common dir is the main checkout's .git. A bare main
+    # repository has no checkout to share, so each worktree keeps its own.
+    if common.name == ".git" and common.parent != top:
+        return common.parent.resolve()
+    return top.resolve()
 
 
 def global_ignore_file() -> Path:

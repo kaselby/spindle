@@ -1,6 +1,6 @@
 """thread.yml as the thread's metadata: validated on every read,
 edited by hand, diffed on the view page; the reading guide; register kinds;
-`thread migrate` from the old cache."""
+the old cache refused with a pointer; `list --flag`."""
 
 from __future__ import annotations
 
@@ -75,7 +75,7 @@ def test_a_file_with_nothing_committed_prints_the_schema(tmp_path):
     assert "checkout" not in text
 
 
-def test_the_old_cache_points_at_thread_migrate(root, make_thread, run):
+def test_the_old_cache_is_refused_with_a_pointer(root, make_thread, run):
     identifier = make_thread("Old cache")
     path = store.resolve_thread(root, identifier)
     _write_yml(path, yaml.safe_dump({
@@ -84,7 +84,7 @@ def test_the_old_cache_points_at_thread_migrate(root, make_thread, run):
     result = run("view", identifier, "--root", root)
     assert result.code != 0
     assert "is in the old format" in result.err
-    assert "Run `thread migrate` once" in result.err
+    assert "commit 5de08e0 has it" in result.err
     assert "unknown key" not in result.err  # one clear message, not six unknown keys
 
 
@@ -419,77 +419,50 @@ def test_tasks_sync_without_a_hash_emits_only_real_changes(root, make_thread, ru
     assert len(events.read_events(path)) == count + 1
 
 
-# ── migrate ──────────────────────────────────────────────────────────────────
+# ── migrated threads ─────────────────────────────────────────────────────────
 
 
-def _to_old_format(path, *, parent=None, namespace=None, project=None):
-    """Turn a thread written by this code into what the old code wrote: the
-    metadata in origin.md's frontmatter, thread.yml a cache of the fold."""
-    front, text = store.parse_frontmatter((path / "origin.md").read_text(encoding="utf-8"))
-    title = metadata.read(path)["title"]
-    front = {"thread": front["thread"], "title": title, "created": front["created"], "by": front["by"]}
-    if parent:
-        front["parent"] = parent
-    if namespace:
-        front["namespace"] = namespace
-    if project:
-        front["project"] = project
-    (path / "origin.md").write_text(store.markdown(front, text), encoding="utf-8")
-    log = events.read_events(path)
-    _write_yml(path, yaml.safe_dump({
-        "id": front["thread"], "slug": path.name.split("-", 1)[1], "title": title,
-        "state": "active", "created": log[0]["ts"], "last-event": log[-1]["ts"], "tip": log[-1]["id"],
-        "events-since-checkpoint": 0, "claims": [], "children": [], "tasks-hash": "abc",
-        **({"parent": parent} if parent else {}),
-    }, sort_keys=False))
-
-
-def test_migrate_moves_metadata_once_and_commits_per_thread(root, make_thread, run):
-    first = make_thread("First parent")
-    second = make_thread("Second parent")
-    child = make_thread("Moved child", "--parent", first)
-    paths = {identifier: store.resolve_thread(root, identifier) for identifier in (first, second, child)}
-    _to_old_format(paths[first], project="spindle")
-    _to_old_format(paths[second])
-    _to_old_format(paths[child], parent=first)
-    # A later reparent outranks the origin's parent, as the old fold had it.
-    events.append(paths[child], "reparented", {"from": first, "to": second}, {"session": "old", "agent": "old"})
-    git(root, "add", "-A")
-    git(root, "commit", "-qm", "old format")
-    commits = len(git(root, "log", "--oneline").splitlines())
-    assert "Run `thread migrate` once" in run("view", child, "--root", root).err
-
-    dry = run("migrate", "--dry-run", "--root", root)
-    assert dry.code == 0, dry.err
-    assert f"- {child}: would migrate (title: Moved child, parent: {second})" in dry.out
-    assert len(git(root, "log", "--oneline").splitlines()) == commits
-    assert "state" in yaml.safe_load(_yml(paths[child]).read_text(encoding="utf-8"))
-
-    done = json.loads(run("migrate", "--root", root, "--json").out)
-    assert sorted(item["status"] for item in done) == ["migrated"] * 3
-    assert metadata.read(paths[child]) == {"title": "Moved child", "parent": second}
-    # `project` was removed: migrate drops it from origin.md rather than moving it.
-    assert metadata.read(paths[first]) == {"title": "First parent"}
-    front, _ = store.parse_frontmatter((paths[first] / "origin.md").read_text(encoding="utf-8"))
-    assert "project" not in front
-    front, _ = store.parse_frontmatter((paths[child] / "origin.md").read_text(encoding="utf-8"))
-    assert set(front) == {"thread", "created", "by"}
-    migrated = [e for e in events.read_events(paths[child]) if e["type"] == "migrated"]
-    assert [e["payload"] for e in migrated] == [{"metadata": {"title": "Moved child", "parent": second}}]
-
-    history = git(root, "log", "--format=%H", f"-{3}").split()
-    assert len(git(root, "log", "--oneline").splitlines()) == commits + 3
-    for sha in history:
-        touched = git(root, "show", "--name-only", "--format=", sha).split()
-        assert len({name.split("/")[2] for name in touched}) == 1, touched
-
-    # The migrated event isn't work: no events since the checkpoint, no diff line.
-    view = run("view", child, "--root", root)
+def test_a_migrated_event_is_a_baseline_not_work(root, make_thread, run):
+    """Stores converted by the old `thread migrate` carry one `migrated` event per
+    thread. The command is gone; reading those events isn't."""
+    identifier = make_thread("Converted")
+    path = store.resolve_thread(root, identifier)
+    events.append(path, "migrated", {"metadata": {"title": "Converted"}}, {"session": "old", "agent": "old"})
+    view = run("view", identifier, "--root", root)
     assert view.code == 0, view.err
     assert "thread.yml since" not in view.out
-    assert f"- {child} — Moved child" in run("view", second, "--root", root).out
+    _write_yml(path, "title: Converted, then renamed\n")
+    assert "thread.yml since" in run("view", identifier, "--root", root).out
 
-    again = json.loads(run("migrate", "--root", root, "--json").out)
-    assert sorted(item["status"] for item in again) == ["already migrated"] * 3
-    assert len(git(root, "log", "--oneline").splitlines()) == commits + 3
-    assert len([e for e in events.read_events(paths[child]) if e["type"] == "migrated"]) == 1
+
+# ── list --flag ──────────────────────────────────────────────────────────────
+
+
+def test_list_filters_by_flag(root, make_thread, run):
+    """--flag key=value matches the value as typed (true, not True); --flag key
+    matches any value; repeated flags must all hold; --json filters the same."""
+    auto = make_thread("Autonomous one")
+    manual = make_thread("Manual one")
+    bare = make_thread("No flags")
+    auto_path = store.resolve_thread(root, auto)
+    manual_path = store.resolve_thread(root, manual)
+    _write_yml(auto_path, "title: Autonomous one\nflags:\n  kiln.autonomous: true\n  owner: tav\n")
+    _write_yml(manual_path, "title: Manual one\nflags:\n  kiln.autonomous: false\n  note: a=b\n")
+
+    def listed(*args):
+        result = run("list", "--root", root, *args)
+        assert result.code == 0, result.err
+        return {identifier for identifier in (auto, manual, bare) if identifier in result.out}
+
+    assert listed("--flag", "kiln.autonomous=true") == {auto}
+    assert listed("--flag", "kiln.autonomous=false") == {manual}
+    assert listed("--flag", "kiln.autonomous") == {auto, manual}
+    assert listed("--flag", "kiln.autonomous", "--flag", "owner=tav") == {auto}
+    assert listed("--flag", "note=a=b") == {manual}  # split at the first `=`
+    assert listed() == {auto, manual, bare}
+
+    none = run("list", "--root", root, "--flag", "owner=beth")
+    assert "No active threads with owner=beth." in none.out
+    as_json = run("list", "--root", root, "--json", "--flag", "owner=tav")
+    assert [item["id"] for item in json.loads(as_json.out)] == [auto]
+    assert run("list", "--root", root, "--flag", "=x").code != 0

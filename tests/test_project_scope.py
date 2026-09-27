@@ -56,6 +56,28 @@ def test_resolution_order(home, monkeypatch):
     assert scope.locate(str(home / "flag"))[0] == (home / "flag").resolve()  # so does --root
 
 
+def test_a_project_is_its_git_repository(home, monkeypatch):
+    """Inside a repository the store sits at its top, wherever the launch folder
+    is; a linked worktree shares its main checkout's; outside git, the folder."""
+    _scope(home, "project")
+    repo = _project(home, "repo")
+    git(repo, "init", "-q")
+    git(repo, "commit", "-q", "--allow-empty", "-m", "start")
+    deep = repo / "src" / "pkg"
+    deep.mkdir(parents=True)
+    monkeypatch.chdir(deep)
+    assert scope.locate()[0] == repo.resolve() / ".spindle"  # the current folder, lifted
+    monkeypatch.setenv("SPINDLE_PROJECT", str(deep))
+    assert scope.locate()[0] == repo.resolve() / ".spindle"  # the pinned folder, lifted too
+    worktree = home / "work" / "repo-branch"
+    git(repo, "worktree", "add", "-q", str(worktree))
+    monkeypatch.setenv("SPINDLE_PROJECT", str(worktree))
+    assert scope.locate()[0] == repo.resolve() / ".spindle"  # one store per repository
+    plain = _project(home, "plain")
+    monkeypatch.setenv("SPINDLE_PROJECT", str(plain))
+    assert scope.locate()[0] == plain.resolve() / ".spindle"  # no repository: the folder
+
+
 def test_global_scope_never_starts_a_store(home, run, origin, monkeypatch):
     monkeypatch.chdir(_project(home))
     assert "Run `thread init`" in run("list").err

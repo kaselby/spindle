@@ -37,9 +37,11 @@ in the folder name is only there so people can read it.
 
 `--root`, else `SPINDLE_ROOT`, else the scope in `~/.spindle/config.yml`
 (`thread setup --scope` writes it; no file means global). Global: `~/.spindle`.
-Project: `<launch folder>/.spindle`, where the launch folder is
-`SPINDLE_PROJECT` (the Claude Code hook and the pi extension set it at session
-start) or else the current directory. The first `thread create` in a project
+Project: `<project>/.spindle`. The project is the git repository the launch
+folder is in (its main checkout, so worktrees share one store), or the launch
+folder itself outside git. The launch folder is `SPINDLE_PROJECT` (the Claude
+Code hook and the pi extension set it at session start) or else the current
+directory. The first `thread create` in a project
 starts its store and adds `**/.spindle/` to the user's global git ignore, never
 the project's own `.gitignore`.
 
@@ -59,8 +61,8 @@ back to user@host, which can't tell two sessions apart, so set it.
 
 design.md says why the split is drawn here. Older stores kept thread.yml as a
 cache the tool rebuilt from the log, with the title and parent in origin.md's
-frontmatter. `thread migrate` converts a store written that way, once; running
-it again changes nothing.
+frontmatter. This version refuses a store written that way; convert it with
+`thread migrate` from an older Spindle (commit 5de08e0 has it).
 
 ## Files in a thread
 
@@ -169,8 +171,8 @@ include: `created`, `claim`, `release`, `note`, task changes, `register`,
 parent-side `child-created`, `child-merged`, `child-dropped`, `child-reopened`,
 and `child-adopted`. The `child-*` events and `reparented` are history (the
 view's arc and counts use them); the subthreads list comes from the children's
-thread.yml. `migrated` is written once per thread by `thread migrate`, with the
-metadata it wrote. Older logs may also contain the old names `child-closed` and
+thread.yml. `migrated` was written once per thread by the old `thread migrate`,
+with the metadata it wrote; the tool still reads it but no longer writes it. Older logs may also contain the old names `child-closed` and
 the states `open` and `closed`. The tool still reads them (`open` as active,
 `closed` as completed, or merged if it came from a merge, and `child-closed` as
 the child completing) but never writes them. `thread replay` reads them.
