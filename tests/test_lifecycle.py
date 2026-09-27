@@ -178,6 +178,18 @@ def test_merge_index_renders_pointers_as_arrows(root, run, body, loaded):
     assert "- **docs/guide.md** — orientation" in index
 
 
+def test_the_view_counts_pointers_instead_of_listing_them(root, run, body, loaded):
+    parent, child = loaded["parent"], loaded["child"]
+    assert run("merge", child, "--promote", "docs/guide.md", "--body", body(_merge_text(child)),
+               "--root", root).code == 0
+    view = run("view", parent, "--root", root).out
+    assert "- **docs/guide.md** — orientation" in view  # promoted: the parent's own
+    assert f"{child}:artifacts" not in view
+    index_path = loaded["parent_path"] / "index.md"
+    assert f"*2 artifacts remain in merged subthreads; `{index_path}` lists them.*" in view
+
+
+
 def test_merge_refuses_a_thread_with_no_parent(root, run, body, make_thread):
     identifier = make_thread("Root thread")
     _cp(run, root, body, identifier, PARENT_BODY)
@@ -277,7 +289,7 @@ def test_merge_without_body_prints_the_template(root, run, loaded):
     assert result.code == 2 and result.err == ""
     template = result.out
     assert f"thread merge {child} --body <file> --promote docs/guide.md --tasks {loaded['tasks'][0]}" in template
-    assert "merging.md" in template
+    assert "completion-and-merging.md" in template
     # The headline is suggested and is the only line before ## From.
     before = store.strip_comments(template).split(f"## From {child}")[0]
     assert [line for line in before.splitlines() if line.strip()] == [f"Merged {child}: Child synthesis."]
@@ -324,7 +336,7 @@ def test_merge_validates_an_authored_body(root, run, body, family):
     def refused(text):
         result = run("merge", child, "--body", body(text), "--root", root)
         assert result.code == 2
-        assert "merging.md" in result.err
+        assert "completion-and-merging.md" in result.err
         assert not written.exists()
         return result.err
 
@@ -415,7 +427,7 @@ def test_complete_refuses_a_subthread_and_points_to_merge(root, run, family):
     result = run("complete", family["child"], "--root", root)
     assert result.code == lifecycle.HAS_PARENT
     assert f"`thread merge {family['child']}`" in result.err
-    assert "merging.md" in result.err
+    assert "completion-and-merging.md" in result.err
     assert f"`thread drop {family['child']}`" in result.err
     # Nothing happened.
     assert _state(root, family["child"]) == "active"
@@ -427,7 +439,7 @@ def test_complete_requires_a_clean_checkpoint(root, run, solo):
     result = run("complete", solo, "--root", root)
     assert result.code == lifecycle.DIRTY
     assert result.err.startswith(f"can't complete yet: {solo} has 1 event since its last checkpoint")
-    assert "lifecycle.md" in result.err
+    assert "completion-and-merging.md" in result.err
 
 
 def test_complete_archives_a_top_level_thread(root, run, solo):
@@ -802,3 +814,30 @@ def test_claim_and_release_do_not_block_a_merge(root, run, body, family):
     assert run("release", family["parent"], "--root", root).code == 0
     result = run("merge", family["child"], "--body", body(_merge_text(family["child"])), "--root", root)
     assert result.code == 0, result.err
+
+
+def test_merge_carries_the_childs_reading_guide_as_a_pointer(root, run, body, loaded):
+    parent, child = loaded["parent"], loaded["child"]
+    (loaded["child_path"] / "reading-guide.md").write_text("1. `docs/guide.md`\n", encoding="utf-8")
+    assert run("register", child, "reading-guide.md", "--kind", "reading-guide",
+               "--purpose", "start here", "--root", root).code == 0
+    _cp(run, root, body, child, CHILD_BODY)
+    assert run("merge", child, "--promote", "docs/guide.md", "--body", body(_merge_text(child)),
+               "--root", root).code == 0
+    view = run("view", parent, "--root", root).out
+    index_path = loaded["parent_path"] / "index.md"
+    assert f"*2 artifacts and 1 reading guide remain in merged subthreads; `{index_path}` lists them.*" in view
+    index = index_path.read_text(encoding="utf-8")
+    assert f"## Reading guides of merged subthreads\n- → **{child}:reading-guide.md** — start here" in index
+    assert not (loaded["parent_path"] / "reading-guide.md").exists()
+
+
+def test_merge_can_promote_the_reading_guide_when_the_parent_has_none(root, run, body, loaded):
+    parent, child = loaded["parent"], loaded["child"]
+    (loaded["child_path"] / "reading-guide.md").write_text("1. `docs/guide.md`\n", encoding="utf-8")
+    assert run("register", child, "reading-guide.md", "--kind", "reading-guide", "--root", root).code == 0
+    _cp(run, root, body, child, CHILD_BODY)
+    assert run("merge", child, "--promote", "reading-guide.md", "docs/guide.md",
+               "--body", body(_merge_text(child)), "--root", root).code == 0
+    assert (loaded["parent_path"] / "reading-guide.md").read_text() == "1. `docs/guide.md`\n"
+    assert "# Reading guide\n1. `docs/guide.md`" in run("view", parent, "--root", root).out

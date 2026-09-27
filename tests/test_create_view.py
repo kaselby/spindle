@@ -47,7 +47,7 @@ def test_template_prints_the_four_headings(run):
     for heading in ("## Context & Motivation", "## Scope", "## Constraints", "## Completion criteria"):
         assert heading in result.out
     assert "Don't invent any" in result.out
-    assert "thread-creation.md" in result.out
+    assert "creating-a-thread.md" in result.out
 
 
 def test_view_renders_the_origin_in_full_and_an_empty_arc(root, make_thread, run):

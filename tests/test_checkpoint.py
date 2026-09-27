@@ -236,7 +236,7 @@ def test_checkpoint_without_body_prints_the_template_with_the_events(root, make_
     tip = events.read_events(_thread_path(root, identifier))[-1]["id"]
     assert f"thread checkpoint {identifier} <file> --at {tip}" in result.out
     assert "note by s2: other session's finding" in result.out
-    assert "## Status" in result.out and "checkpointing.md" in result.out
+    assert "## Status" in result.out and "checkpoints.md" in result.out
     assert not list((_thread_path(root, identifier) / "checkpoints").glob("*.md"))
 
 

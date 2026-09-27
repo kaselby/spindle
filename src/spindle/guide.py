@@ -77,7 +77,7 @@ def origin_template(command: str) -> str:
         f"<!-- Origin template. Fill it in, save it to a file, and run:\n"
         f"       {command}\n"
         f"     The origin is the thread's fixed point: every checkpoint is measured against it.\n"
-        f"     Comment lines like this one are ignored. Guide: {doc('thread-creation.md')}. -->\n\n"
+        f"     Comment lines like this one are ignored. Guide: {doc('creating-a-thread.md')}. -->\n\n"
         + ORIGIN_TEMPLATE
     )
 
@@ -90,7 +90,7 @@ def reanchor_origin_template(command: str) -> str:
         f"     Write it as if the thread were being created today: self-contained, not in reference\n"
         f"     to the old origin. Quote original words again if they're still the reason for the work.\n"
         f"     Only the last section talks about the change.\n"
-        f"     Comment lines like this one are ignored. Guide: {doc('lifecycle.md')}. -->\n\n"
+        f"     Comment lines like this one are ignored. Guide: {doc('changing-direction.md')}. -->\n\n"
         + ORIGIN_TEMPLATE.rstrip("\n")
         + "\n\n## Previous origin\n"
         "<!-- Required, at most 500 characters. A few sentences: what the earlier framing was, what\n"
@@ -127,7 +127,7 @@ def checkpoint_template(thread_id: str, recent: list[dict[str, Any]],
     return (
         f"<!-- Checkpoint template for {thread_id}. Fill it in, save it to a file, and run:\n"
         f"       {command}{at_line}{replaces}\n"
-        f"     Comment lines like this one are ignored. Guide: {doc('checkpointing.md')}. -->\n\n"
+        f"     Comment lines like this one are ignored. Guide: {doc('checkpoints.md')}. -->\n\n"
         f"{events_block}"
         f"<!-- First line: a headline, at most {LIMITS['headline_chars']} characters.\n"
         f"     Then a few sentences of outline. Headline and outline together: at most "
@@ -190,7 +190,7 @@ def merge_template(child_id: str, parent_id: str, parent_checkpoint: str, comman
         f"       {command}\n"
         f"     This becomes {parent_id}'s next checkpoint, replacing {parent_checkpoint} as its current "
         f"state,\n     so write it in full. Comment lines like this one are ignored. "
-        f"Guide: {doc('merging.md')}. -->\n\n"
+        f"Guide: {doc('completion-and-merging.md')}. -->\n\n"
         f"<!-- First line: the headline, at most {LIMITS['headline_chars']} characters, and nothing else "
         f"before `## From {child_id}`.\n     A suggestion is filled in; say what the merge brought. -->\n"
         f"{suggested}\n\n"
@@ -227,22 +227,3 @@ def bad_namespace(value: str, source: str) -> str:
 
 
 READING_GUIDE = "reading-guide.md"
-
-# The first line is the rule. It is an HTML comment, so it stays in the file
-# for whoever edits it but isn't shown on the view page or counted.
-READING_GUIDE_TEMPLATE = """\
-<!-- Where to look and in what order, for someone new to this thread; never status, next steps or handoff notes (those go in the checkpoint). Under {cap:,} characters; doctor checks every local path. -->
-<!-- Point at anything, inside or outside the thread: this thread's docs/ and artifacts/, repo paths (~/..., /...), branches, PRs, URLs, another thread's <id>:docs/<file>. Replace the lines below. -->
-1. `docs/<file>.md`: what it is. Read it first because ...
-2. `~/<repo>/<path>` on branch `<branch>`: what's there, and what to read in it.
-3. `<other-thread-id>:docs/<file>.md`: the background this work builds on.
-"""
-
-
-def reading_guide_template(thread_id: str, path: str) -> str:
-    from .limits import LIMITS
-
-    return (
-        READING_GUIDE_TEMPLATE.format(cap=LIMITS["reading_guide_chars"])
-        + f"\n<!-- Save it as {path} and edit it directly. `thread view {thread_id}` shows it. -->\n"
-    )

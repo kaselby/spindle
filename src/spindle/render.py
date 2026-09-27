@@ -77,8 +77,10 @@ def _registration_target(thread: Path, payload: dict[str, Any]) -> Path | None:
 
 
 def kind_of(registration: dict[str, Any]) -> str:
-    """doc or artifact, by folder. Registrations written before the change
-    carry one of twelve retired kinds; the folder always decided the section."""
+    """doc, artifact or reading-guide, by path. Registrations written before the
+    change carry one of twelve retired kinds; the folder always decided the section."""
+    if registration["path"] == guide.READING_GUIDE:
+        return "reading-guide"
     return "doc" if registration["path"].startswith("docs/") else "artifact"
 
 
@@ -93,8 +95,19 @@ def _entry_details(thread: Path, payload: dict[str, Any], date: str, *, artifact
     return ", ".join(details)
 
 
-def _index_lines(thread: Path, *, artifact_limit: int | None) -> list[str]:
-    rows = registrations(thread)
+def _index_lines(thread: Path, *, artifact_limit: int | None, pointers: bool = True) -> list[str]:
+    """The docs and artifacts sections. With ``pointers=False`` (the view page),
+    entries that point into merged children collapse to one count line. A path
+    registered again shows once, with its newest registration."""
+    newest: dict[tuple[str, str | None], tuple[dict[str, Any], str]] = {}
+    for item, date in registrations(thread):
+        key = (item["registration"]["path"], item.get("pointer", "").split("@", 1)[0] or None)
+        newest.pop(key, None)  # re-insert so order follows the newest registration
+        newest[key] = (item, date)
+    rows = list(newest.values())
+    carried = [item for item, _ in rows if item.get("pointer")]
+    if not pointers:
+        rows = [(item, date) for item, date in rows if not item.get("pointer")]
     docs = [(item, date) for item, date in rows if item["registration"]["path"].startswith("docs/")]
     artifacts = [(item, date) for item, date in rows if item["registration"]["path"].startswith("artifacts/")]
     lines = ["## Docs — read these when…"]
@@ -120,6 +133,23 @@ def _index_lines(thread: Path, *, artifact_limit: int | None) -> list[str]:
             lines.append(f"- … {hidden} more; see `{thread / 'index.md'}`")
     else:
         lines.append("- None.")
+    guides = [item for item in carried if kind_of(item["registration"]) == "reading-guide"]
+    if guides and pointers:
+        lines += ["", "## Reading guides of merged subthreads"]
+        lines += [f"- {_name(item)}" + (f" — {item['registration']['purpose']}" if item["registration"].get("purpose") else "")
+                  for item in guides]
+    if carried and not pointers:
+        by_kind = [kind_of(item["registration"]) for item in carried]
+        counts = ", ".join(part for part in (
+            _plural(by_kind.count("doc"), "doc") if by_kind.count("doc") else "",
+            _plural(by_kind.count("artifact"), "artifact") if by_kind.count("artifact") else "",
+            _plural(by_kind.count("reading-guide"), "reading guide") if by_kind.count("reading-guide") else "",
+        ) if part)
+        if ", " in counts:
+            head, _, last = counts.rpartition(", ")
+            counts = f"{head} and {last}"
+        verb = "remains" if len(carried) == 1 else "remain"
+        lines += ["", f"*{counts} {verb} in merged subthreads; `{thread / 'index.md'}` lists them.*"]
     return lines
 
 
@@ -223,7 +253,7 @@ def _children_rows(
 
 def _index_body(thread: Path) -> list[str]:
     """The capped docs/artifacts summary embedded in the orientation page."""
-    return _index_lines(thread, artifact_limit=LIMITS["artifact_index"])
+    return _index_lines(thread, artifact_limit=LIMITS["artifact_index"], pointers=False)
 
 
 
@@ -439,13 +469,8 @@ def view(root: Path, thread: Path, *, deep: bool = False) -> str:
         # errors="replace": a stray non-UTF-8 byte shows as U+FFFD instead of failing the view.
         text = reading_path.read_text(encoding="utf-8", errors="replace")
         reading = ["# Reading guide", guide.strip_comments(text).strip(), ""]
-        docs_intro: list[str] = []
     else:
         reading = []
-        docs_intro = [
-            f"*No reading guide. For pointers and a reading order, `thread reading-guide {identifier}` "
-            "prints the template.*"
-        ]
     return "\n".join([
         *title_block, *banner, "",
         "# Origin: why this exists", *origin_history, origin_text, "",
@@ -459,7 +484,7 @@ def view(root: Path, thread: Path, *, deep: bool = False) -> str:
         "# Who's working", *(claim_rows or ["- Nobody."]), "",
         "# Open tasks", *task_rows, "",
         *reading,
-        "# Docs and artifacts", *docs_intro, *_index_body(thread), "",
+        "# Docs and artifacts", *_index_body(thread), "",
         "# Related threads", *(around or ["- None."]),
     ]).replace("\n\n\n", "\n\n") + "\n"
 

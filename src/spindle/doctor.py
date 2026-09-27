@@ -131,9 +131,14 @@ def check_unregistered(thread: Path, _: dict[str, str]) -> list[Finding]:
         path for path in files
         if path not in registered and not any(path.startswith(f"{directory}/") for directory in directories)
     )
+    if (thread / guide.READING_GUIDE).is_file() and guide.READING_GUIDE not in registered:
+        missing.append(guide.READING_GUIDE)
     return [
 
         ("unregistered", (
+            f"{path} isn't registered, so its changes aren't in the log. "
+            f"`thread register {_id(thread)} {path} --kind reading-guide`."
+        )) if path == guide.READING_GUIDE else ("unregistered", (
             f"{path} isn't registered, so the view page doesn't list it. "
             f"`thread register {_id(thread)} {path} --kind {'doc' if path.startswith('docs/') else 'artifact'} "
             f"--purpose \"...\"`"

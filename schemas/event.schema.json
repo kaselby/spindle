@@ -179,7 +179,7 @@
     {
       "if": { "properties": { "type": { "const": "register" } } },
       "then": {
-        "description": "A doc or artifact registered on the thread. index.md is the fold over these.",
+        "description": "A doc or artifact registered on the thread, or the reading guide written or changed. index.md is the fold over these.",
         "properties": { "payload": {
           "type": "object", "additionalProperties": false,
           "required": ["registration", "checkpoint"],
@@ -187,7 +187,7 @@
             "registration": { "$ref": "common.schema.json#/$defs/registration" },
             "checkpoint": { "type": "string" },
             "from": { "description": "For a copy made at merge: the `<thread>@<cid>` it came from.", "type": "string", "pattern": "^[a-z0-9]{6,12}@c[0-9]{4}$" },
-            "pointer": { "description": "An item left in another thread: `<thread>:<path>@<cid>`. Nothing is copied; the index shows it as a pointer.", "type": "string", "pattern": "^[a-z0-9]{6,12}:(docs|artifacts)/[^/].*@c[0-9]{4}$" }
+            "pointer": { "description": "An item left in another thread: `<thread>:<path>@<cid>`. Nothing is copied; the index shows it as a pointer.", "type": "string", "pattern": "^[a-z0-9]{6,12}:((docs|artifacts)/[^/].*|reading-guide\\.md)@c[0-9]{4}$" }
           }
         } },
         "required": ["payload"]

@@ -77,7 +77,7 @@ def _require_clean(thread: Path, code: int, *, verb: str, role: str = "") -> str
         )
         finishing = (
             f" For what a final checkpoint should say, "
-            f"{guide.doc('merging.md' if verb == 'merge' else 'lifecycle.md')}."
+            f"{guide.doc('changing-direction.md' if verb == 'drop' else 'completion-and-merging.md')}."
             if verb in ("merge", "complete", "drop") else ""
         )
         raise ThreadError(
@@ -194,7 +194,7 @@ def _register(parent: Path, registration: dict[str, Any], by: dict[str, str], **
 
 
 def _registered(thread: Path) -> dict[str, dict[str, Any]]:
-    """Registered docs/artifacts held in this thread, newest registration wins.
+    """Registered docs/artifacts (and the reading guide) held in this thread, newest registration wins.
     Pointers are other threads' files, so they are not promotable."""
     found: dict[str, dict[str, Any]] = {}
     for payload, _ in render.registrations(thread):
@@ -240,7 +240,7 @@ def merge(
         raise ThreadError(
             f"{child_id} has no parent thread, so there is nothing to merge it into. To finish it, "
             f"use `thread complete {child_id}`, or `thread drop {child_id}` if it isn't worth pursuing "
-            f"({guide.doc('lifecycle.md')}).", code=NO_PARENT,
+            f"({guide.doc('completion-and-merging.md')}).", code=NO_PARENT,
         )
     parent_id = thread_id(parent)
     # Everything the writes below read must be readable now. The rollback only
@@ -308,11 +308,12 @@ def merge(
     rolling_ids = {task.get("id") for task in rolling}
     left_tasks = sum(1 for task in board if not task.get("done") and task.get("id") not in rolling_ids)
     left_docs = sum(1 for relative in pointers if relative.startswith("docs/"))
+    left_artifacts = sum(1 for relative in pointers if relative.startswith("artifacts/"))
 
     def facts(moved: list[tuple[str, str | None]]) -> str:
         return guide.merge_facts(
             child_id, parent_id, child_cid, _headline(child), wanted, moved,
-            left_docs, len(pointers) - left_docs, left_tasks,
+            left_docs, left_artifacts, left_tasks,
         )
 
     if body is None:
@@ -397,7 +398,7 @@ def _finish(
         raise ThreadError(
             f"{identifier} is a subthread of {thread_id(parent)}, so it finishes by merging: "
             f"`thread merge {identifier}` carries its result into {thread_id(parent)} "
-            f"({guide.doc('merging.md')}). If it isn't worth pursuing, `thread drop {identifier}`.",
+            f"({guide.doc('completion-and-merging.md')}). If it isn't worth pursuing, `thread drop {identifier}`.",
             code=HAS_PARENT,
         )
     checkpoint_id = _require_clean(thread, DIRTY, verb=verb)
@@ -607,7 +608,7 @@ def revise(root: Path, thread: Path, source: Path, by: dict[str, str]) -> dict[s
     if not addition.strip():
         raise ThreadError(
             f"{source} is empty. A revision says what changed in the understanding of the work, and why; "
-            f"it is appended to the origin ({guide.doc('thread-creation.md')})."
+            f"it is appended to the origin ({guide.doc('changing-direction.md')})."
         )
     origin = thread / "origin.md"
     metadata, body = parse_frontmatter(origin.read_text(encoding="utf-8"))

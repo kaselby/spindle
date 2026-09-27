@@ -60,27 +60,27 @@
       ]
     },
     "relPath": {
-      "description": "Path relative to the thread folder, forward slashes.",
+      "description": "Path relative to the thread folder, forward slashes: under docs/ or artifacts/, or the reading guide.",
       "type": "string",
-      "pattern": "^(docs|artifacts)/[^/].*$"
+      "pattern": "^((docs|artifacts)/[^/].*|reading-guide\\.md)$"
     },
     "registration": {
-      "description": "A doc or artifact listed on the thread's view page. Docs are orientation guides meant to steer future work; artifacts are records. Docs also need read-when.",
+      "description": "A doc or artifact listed on the thread's view page, or an update to the thread's reading guide. Docs are orientation guides meant to steer future work; artifacts are records. Docs also need read-when; the reading guide needs no purpose.",
       "type": "object",
-      "required": ["path", "kind", "purpose"],
+      "required": ["path", "kind"],
       "additionalProperties": false,
       "properties": {
         "path": { "$ref": "#/$defs/relPath" },
         "kind": {
-          "description": "doc (the path is under docs/) or artifact (under artifacts/); the tool refuses a kind that doesn't match the folder. Older registrations carry one of twelve retired kinds; readers map those by folder, so they stay valid here but are never written now.",
+          "description": "doc (the path is under docs/), artifact (under artifacts/), or reading-guide (reading-guide.md); the tool refuses a kind that doesn't match the path. Older registrations carry one of twelve retired kinds; readers map those by folder, so they stay valid here but are never written now.",
           "type": "string",
           "anyOf": [
-            { "enum": ["doc", "artifact"] },
+            { "enum": ["doc", "artifact", "reading-guide"] },
             { "description": "Retired kinds, readable in old logs only.", "enum": ["guide", "runbook", "reading-order", "report", "experiment", "dataset", "weights", "diagram", "script", "harness", "presentation", "other"] }
           ]
         },
         "purpose": {
-          "description": "One line: what this is for. Capped so the index stays one line per entry.",
+          "description": "One line: what this is for (for the reading guide, optional: what changed). Capped so the index stays one line per entry.",
           "type": "string",
           "minLength": 1,
           "maxLength": 160
@@ -108,6 +108,11 @@
         {
           "if": { "properties": { "kind": { "const": "artifact" } }, "required": ["kind"] },
           "then": { "properties": { "path": { "pattern": "^artifacts/" } } }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "reading-guide" } }, "required": ["kind"] },
+          "then": { "properties": { "path": { "const": "reading-guide.md" } }, "not": { "required": ["read-when"] } },
+          "else": { "required": ["purpose"], "properties": { "path": { "pattern": "^(docs|artifacts)/" } } }
         }
       ]
     }
