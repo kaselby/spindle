@@ -62,8 +62,7 @@ def check_inactive(thread: Path, _: dict[str, str]) -> list[Finding]:
     log = events.read_events(thread)
     if events.lifecycle_state(log) != "active":
         return []
-    # The doctor's own events (an expired release, say) and the migration's
-    # baseline are not activity, so shelving looks at the last event somebody
+    # The doctor's own events (an expired release, say) are not activity, so shelving looks at the last event somebody
     # else wrote.
     authored = [event for event in log if events.is_activity(event)]
     if not authored:

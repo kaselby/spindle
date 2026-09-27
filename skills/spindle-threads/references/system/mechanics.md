@@ -37,9 +37,11 @@ in the folder name is only there so people can read it.
 
 `--root`, else `SPINDLE_ROOT`, else the scope in `~/.spindle/config.yml`
 (`thread setup --scope` writes it; no file means global). Global: `~/.spindle`.
-Project: `<launch folder>/.spindle`, where the launch folder is
-`SPINDLE_PROJECT` (the Claude Code hook and the pi extension set it at session
-start) or else the current directory. The first `thread create` in a project
+Project: `<project>/.spindle`. The project is the git repository the launch
+folder is in (its main checkout, so worktrees share one store), or the launch
+folder itself outside git. The launch folder is `SPINDLE_PROJECT` (the Claude
+Code hook and the pi extension set it at session start) or else the current
+directory. The first `thread create` in a project
 starts its store and adds `**/.spindle/` to the user's global git ignore, never
 the project's own `.gitignore`.
 
@@ -51,16 +53,13 @@ back to user@host, which can't tell two sessions apart, so set it.
 
 | What | Where | Who writes it |
 |---|---|---|
-| Metadata: title, parent, `flags:` (and `supersedes`, old threads only) | `thread.yml` | people and agents, by hand; the tool on create, reanchor (title) and reparent (parent) |
+| Metadata: title, parent, `flags:` | `thread.yml` | people and agents, by hand; the tool on create, reanchor (title) and reparent (parent) |
 | What happened: claims, notes, checkpoints, tasks, registrations, links, merges | `log.jsonl` | the tool, append-only |
 | Current state: state, claims, counts, last checkpoint, subthreads, links | nowhere; computed on read | never stored |
 | Why the work exists | `origin.md` | narrative only; its frontmatter says only whose it is and when it was written |
 | Namespace | the folder | set at create (`--ns`) |
 
-design.md says why the split is drawn here. Older stores kept thread.yml as a
-cache the tool rebuilt from the log, with the title and parent in origin.md's
-frontmatter. `thread migrate` converts a store written that way, once; running
-it again changes nothing.
+design.md says why the split is drawn here.
 
 ## Files in a thread
 
@@ -90,8 +89,7 @@ It is checked every time it's read. A key the tool doesn't know is an error that
 names it and guesses what you meant (`tittle` → `title`); your own keys go under
 `flags:`. Flag values are single values (text, number, true/false), not lists or
 mappings. Prefix flag names with your tool's name (`kiln.autonomous`); nothing
-enforces it. `supersedes` is kept for old threads only; don't add it to new
-ones.
+enforces it.
 
 A thread.yml that doesn't validate stops commands on that one thread, with how
 to fix it: the `git -C … checkout -- …` command that restores the last committed
@@ -120,8 +118,7 @@ merge or drop `--force` moves a subthread up), so comments and flag order
 survive. Hand edits aren't events. The view page shows them as a line under the
 banner, "thread.yml since the last checkpoint: title, parent changed; 2 flags
 changed", diffed against the `metadata:` block of the latest checkpoint (before
-the first checkpoint, the `created` event; for a migrated thread, the `migrated`
-event). Built-in fields are named and flags are counted. The line is not
+the first checkpoint, the `created` event). Built-in fields are named and flags are counted. The line is not
 activity: it doesn't add to the event count and doesn't wake an inactive thread.
 The view lists the flags on one line under the title.
 
@@ -150,9 +147,7 @@ URLs and branch names aren't checked.
 
 `thread register <id> <path> --kind doc|artifact --purpose "..."` (docs also
 need `--read-when`). The kind must match the folder: `doc` for a path under
-docs/, `artifact` under artifacts/. Older registrations carry one of twelve
-older kinds (guide, report, dataset, ...); they still read, filed by their
-folder, and the kind is no longer shown. The third kind, `reading-guide`, is
+docs/, `artifact` under artifacts/. The third kind, `reading-guide`, is
 described above. Registering a path again replaces its entry: the view and
 index.md show only the newest registration.
 
@@ -165,19 +160,15 @@ shows only a count of them, with a line pointing to index.md.
 Every event has an id, a timestamp, who did it, a type, and a payload. Types
 include: `created`, `claim`, `release`, `note`, task changes, `register`,
 `checkpoint`, `origin-revised`, `origin-replaced`, `linked`, `unlinked`,
-`state-changed`, `merged-into`, `reopened`, `reparented`, `migrated`, and the
+`state-changed`, `merged-into`, `reopened`, `reparented`, and the
 parent-side `child-created`, `child-merged`, `child-dropped`, `child-reopened`,
 and `child-adopted`. The `child-*` events and `reparented` are history (the
 view's arc and counts use them); the subthreads list comes from the children's
-thread.yml. `migrated` is written once per thread by `thread migrate`, with the
-metadata it wrote. Older logs may also contain the old names `child-closed` and
-the states `open` and `closed`. The tool still reads them (`open` as active,
-`closed` as completed, or merged if it came from a merge, and `child-closed` as
-the child completing) but never writes them. `thread replay` reads them.
+thread.yml.
 
 "Events since the last checkpoint" counts every event after the latest
 checkpoint, notes included. Events that only record a state change (like a merge
-or reopen) and the `migrated` event don't count as work.
+or reopen) don't count as work.
 
 ## Git
 

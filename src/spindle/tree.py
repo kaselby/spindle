@@ -22,7 +22,7 @@ class Row(NamedTuple):
 
 def last_activity(log: list[dict], cache: dict) -> str:
     """When someone last wrote to the thread. The doctor's own events (marking it
-    inactive, expiring a claim) and the migration's baseline aren't activity, or every inactive thread would
+    inactive, expiring a claim) aren't activity, or every inactive thread would
     look as recent as the last doctor pass."""
     for event in reversed(log):
         if is_activity(event):

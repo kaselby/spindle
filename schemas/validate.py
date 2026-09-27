@@ -26,7 +26,7 @@ cases = {
  "origin.schema.json": [
   ({"thread":"k7q2m9xa","created":TS,"by":ident}, True),
   ({"thread":"k7q2m9xa","created":TS,"by":ident,"previous":"origin-1.md"}, True),
-  # Metadata moved to thread.yml; an unmigrated origin fails.
+  # The title belongs in thread.yml, not here.
   ({"thread":"k7q2m9xa","title":"Thread schemas","created":TS,"by":ident}, False),
   ({"created":TS,"by":ident}, False)],
  "tasks.schema.json": [
@@ -36,10 +36,7 @@ cases = {
   ({"id":E1,"ts":TS,"by":ident,"type":"created","payload":{"title":"x"}}, True),
   ({"id":E1,"ts":TS,"by":ident,"type":"created","payload":{"title":"x","parent":"m3n4p5","from-task":"t9k2a","flags":{"kiln.autonomous":True},"namespace":"research"}}, True),
   ({"id":E1,"ts":TS,"by":ident,"type":"created","payload":{"title":"x","flags":{"k":[1]}}}, False),
-  ({"id":E1,"ts":TS,"by":ident,"type":"migrated","payload":{"metadata":{"title":"x","parent":"m3n4p5"}}}, True),
-  ({"id":E1,"ts":TS,"by":ident,"type":"migrated","payload":{"metadata":{"parent":"m3n4p5"}}}, False),
-  ({"id":E1,"ts":TS,"by":ident,"type":"migrated","payload":{}}, False),
-  # Register kind: doc|artifact, matching the folder; the retired kinds stay readable.
+  # Register kind: doc|artifact, matching the folder.
   ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"pending","registration":{"path":"docs/a.md","kind":"doc","purpose":"p","read-when":"r"}}}, True),
   ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"pending","registration":{"path":"artifacts/a.csv","kind":"artifact","purpose":"p"}}}, True),
   ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"pending","registration":{"path":"artifacts/a.csv","kind":"doc","purpose":"p"}}}, False),
@@ -54,10 +51,10 @@ cases = {
   ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"pending","registration":{"path":"artifacts/a.csv","kind":"artifact"}}}, False),
   ({"id":E2,"ts":TS,"by":ident,"type":"claim","payload":{"intent":"drafting"}}, True),
   ({"id":E2,"ts":TS,"by":ident,"type":"claim"}, True),
-  ({"id":E7,"ts":TS,"by":ident,"type":"state-changed","payload":{"from":"inactive","to":"open"}}, True),
+  ({"id":E7,"ts":TS,"by":ident,"type":"state-changed","payload":{"from":"inactive","to":"open"}}, False),
   ({"id":E3,"ts":TS,"by":ident,"type":"checkpoint","payload":{"checkpoint":"c0001","at":E2,"headline":"h"}}, True),
-  ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"c0001","registration":{"path":"docs/a.md","kind":"guide","purpose":"p"}}}, False),
-  ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"c0001","registration":{"path":"docs/a.md","kind":"guide","purpose":"p","read-when":"r"}}}, True),
+  ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"c0001","registration":{"path":"docs/a.md","kind":"doc","purpose":"p"}}}, False),
+  ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"c0001","registration":{"path":"docs/a.md","kind":"doc","purpose":"p","read-when":"r"}}}, True),
   ({"id":E5,"ts":TS,"by":{"agent":"worker"},"type":"note","payload":{"text":"x"}}, False),
   ({"id":E6,"ts":TS,"by":ident,"type":"bogus","payload":{}}, False),
   ({"id":1,"ts":TS,"by":ident,"type":"note","payload":{"text":"x"}}, False),
@@ -68,9 +65,9 @@ cases = {
   ({"id":E6,"ts":TS,"by":ident,"type":"child-merged","payload":{"child":"k7q2m9xa"}}, False),
   ({"id":E6,"ts":TS,"by":ident,"type":"merged-into","payload":{"parent":"k7q2m9xa","checkpoint":"c0007"}}, True),
   ({"id":E6,"ts":TS,"by":ident,"type":"merged-into","payload":{"parent":"k7q2m9xa","checkpoint":"7"}}, False),
-  ({"id":E6,"ts":TS,"by":ident,"type":"child-closed","payload":{"child":"k7q2m9xa","checkpoint":"c0002"}}, True),
+  ({"id":E6,"ts":TS,"by":ident,"type":"child-closed","payload":{"child":"k7q2m9xa","checkpoint":"c0002"}}, False),
   ({"id":E6,"ts":TS,"by":ident,"type":"child-reopened","payload":{"child":"k7q2m9xa"}}, True),
-  ({"id":E6,"ts":TS,"by":ident,"type":"child-superseded","payload":{"child":"k7q2m9xa","successor":"m3n4p5"}}, True),
+  ({"id":E6,"ts":TS,"by":ident,"type":"child-superseded","payload":{"child":"k7q2m9xa","successor":"m3n4p5"}}, False),
   ({"id":E6,"ts":TS,"by":ident,"type":"child-adopted","payload":{"child":"k7q2m9xa","title":"t","from":"m3n4p5"}}, True),
   ({"id":E6,"ts":TS,"by":ident,"type":"reparented","payload":{"from":"k7q2m9xa","to":"m3n4p5"}}, True),
   ({"id":E6,"ts":TS,"by":ident,"type":"reparented","payload":{"from":"k7q2m9xa"}}, False),
@@ -79,17 +76,17 @@ cases = {
   ({"id":E6,"ts":TS,"by":ident,"type":"origin-replaced","payload":{"previous":"origin.md","after-checkpoint":"c0007"}}, False),
   ({"id":E6,"ts":TS,"by":ident,"type":"linked","payload":{"kind":"blocked-by","target":"m3n4p5"}}, True),
   ({"id":E6,"ts":TS,"by":ident,"type":"unlinked","payload":{"kind":"follows","target":"m3n4p5"}}, False),
-  ({"id":E7,"ts":TS,"by":ident,"type":"state-changed","payload":{"from":"open","to":"superseded","reason":"superseded","successor":"m3n4p5"}}, True),
+  ({"id":E7,"ts":TS,"by":ident,"type":"state-changed","payload":{"from":"open","to":"superseded","reason":"superseded","successor":"m3n4p5"}}, False),
   ({"id":E7,"ts":TS,"by":ident,"type":"state-changed","payload":{"from":"inactive","to":"active"}}, True),
   ({"id":E7,"ts":TS,"by":ident,"type":"state-changed","payload":{"from":"active","to":"dropped"}}, True),
   ({"id":E7,"ts":TS,"by":ident,"type":"state-changed","payload":{"from":"active","to":"finished"}}, False),
   ({"id":E6,"ts":TS,"by":ident,"type":"child-dropped","payload":{"child":"k7q2m9xa","checkpoint":"c0002"}}, True),
   ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"c0001","from":"k7q2m9xa@c0003",
-    "registration":{"path":"docs/a.md","kind":"guide","purpose":"p","read-when":"r"}}}, True),
+    "registration":{"path":"docs/a.md","kind":"doc","purpose":"p","read-when":"r"}}}, True),
   ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"c0001","pointer":"k7q2m9xa:artifacts/b.csv@c0003",
-    "registration":{"path":"artifacts/b.csv","kind":"dataset","purpose":"p"}}}, True),
+    "registration":{"path":"artifacts/b.csv","kind":"artifact","purpose":"p"}}}, True),
   ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"c0001","pointer":"artifacts/b.csv",
-    "registration":{"path":"artifacts/b.csv","kind":"dataset","purpose":"p"}}}, False),
+    "registration":{"path":"artifacts/b.csv","kind":"artifact","purpose":"p"}}}, False),
   ({"id":E1,"ts":TS,"by":ident,"type":"task-added","payload":{"task":"t9k2a","text":"x","from":"k7q2m9xa"}}, True)],
  "checkpoint.schema.json": [
   ({"id":"c0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"headline":"h"}, True),
@@ -106,9 +103,10 @@ cases = {
   ({"id":"c0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"headline":"h","metadata":{"tittle":"T"}}, False)],
  "thread.schema.json": [
   ({"title":"Thread schemas"}, True),
-  ({"title":"T","parent":"m3n4p5","from-task":"t9k2a","supersedes":"k7q2m9xa",
+  ({"title":"T","parent":"m3n4p5","from-task":"t9k2a",
     "flags":{"kiln.autonomous":True,"priority":2,"owner":"alice","due":None}}, True),
   ({"title":"T","parent":None}, True),
+  ({"title":"T","supersedes":"k7q2m9xa"}, False),
   ({"parent":"m3n4p5"}, False),
   ({"title":""}, False),
   ({"title":"t"*81}, False),
@@ -117,10 +115,7 @@ cases = {
   ({"title":"T","project":"spindle"}, False),
   ({"title":"T","parent":"Not An Id"}, False),
   ({"title":"T","flags":{"tags":["a","b"]}}, False),
-  ({"title":"T","flags":{"nested":{"a":1}}}, False),
-  # The older cache format is no longer this file's shape.
-  ({"id":"k7q2m9xa","slug":"thread-schemas","title":"T","state":"active","created":TS,"last-event":TS,
-    "tip":E3,"events-since-checkpoint":0,"children":[],"claims":[]}, False)],
+  ({"title":"T","flags":{"nested":{"a":1}}}, False)],
 }
 fails = 0
 for name, cs in cases.items():

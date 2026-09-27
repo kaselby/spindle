@@ -7,8 +7,7 @@ import json
 
 import pytest
 
-from conftest import git
-from spindle import events, lifecycle, metadata, store, summary
+from spindle import lifecycle, metadata, store, summary
 
 PARENT_BODY = "Parent synthesis.\n\n## Status\nThe parent holds.\n"
 CHILD_BODY = "Child synthesis.\n\nA second outline line.\n\n## Status\nThe child is done.\n"
@@ -140,31 +139,6 @@ def test_merge_into_a_parent_with_a_bad_thread_yml_writes_nothing(root, run, bod
     assert _logs(root, parent, child) == before
     assert store.is_active(_path(root, child))
     assert not (_path(root, parent) / "checkpoints" / "c0002.md").exists()
-
-
-# ── 3. migrate leaves new-model threads alone ────────────────────────────────
-
-
-def test_migrate_skips_a_thread_created_under_the_new_model(root, run, make_thread):
-    identifier = make_thread("Fresh")
-    git(root, "add", "-A")
-    git(root, "commit", "-m", "baseline")
-    commits = len(git(root, "log", "--oneline").splitlines())
-    types = [event["type"] for event in events.read_events(_path(root, identifier))]
-
-    result = run("migrate", "--root", root, "--json")
-    assert result.code == 0, result.err
-    assert [item["status"] for item in json.loads(result.out)] == ["already migrated"]
-    assert [event["type"] for event in events.read_events(_path(root, identifier))] == types
-    assert len(git(root, "log", "--oneline").splitlines()) == commits
-
-
-def test_migrate_reports_an_invalid_new_model_thread_yml(root, run, make_thread):
-    identifier = make_thread("Fresh")
-    _yml(root, identifier).write_text("titel: Fresh\n", encoding="utf-8")
-    result = run("migrate", "--root", root, "--json")
-    [item] = json.loads(result.out)
-    assert item["status"] == "failed" and "unknown key `titel`" in item["error"]
 
 
 # ── 4. self-parent, cycles, cross-namespace parents ──────────────────────────
@@ -320,8 +294,8 @@ def test_a_forced_reparent_doesnt_show_as_a_thread_yml_change(root, run, tree3):
 def test_an_unquoted_all_digit_parent_reads_as_an_id(tmp_path):
     folder = tmp_path / "abc234-loose"
     folder.mkdir()
-    (folder / "thread.yml").write_text("title: Digits\nparent: 234567\nsupersedes: 345678\n", encoding="utf-8")
-    assert metadata.read(folder) == {"title": "Digits", "parent": "234567", "supersedes": "345678"}
+    (folder / "thread.yml").write_text("title: Digits\nparent: 234567\n", encoding="utf-8")
+    assert metadata.read(folder) == {"title": "Digits", "parent": "234567"}
     (folder / "thread.yml").write_text("title: Digits\nparent: true\n", encoding="utf-8")
     with pytest.raises(metadata.MetadataError):
         metadata.read(folder)

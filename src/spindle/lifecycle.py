@@ -201,7 +201,6 @@ def _registered(thread: Path) -> dict[str, dict[str, Any]]:
         if payload.get("pointer"):
             continue
         registration = dict(payload["registration"])
-        registration["kind"] = render.kind_of(registration)  # old logs carry the retired kinds
         found[registration["path"]] = registration
     return found
 
@@ -647,7 +646,7 @@ def archive(root: Path, by: dict[str, str]) -> list[str]:
         changed = [
             event for event in log
             if event["type"] == "state-changed"
-            and store.current_state(event["payload"]["to"], event["payload"].get("reason")) == state
+            and event["payload"]["to"] == state
         ]
         moment = changed[-1]["ts"] if changed else log[-1]["ts"]
         destination = _to_archive(root, thread, moment)

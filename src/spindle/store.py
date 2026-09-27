@@ -20,22 +20,9 @@ ALPHABET = "23456789abcdefghjkmnpqrstuvwxyz"
 # goes through is_final, never its own tuple.
 FINAL_STATES = ("merged", "completed", "dropped")
 
-# Logs written before the rename. A legacy close that was really a merge
-# carries reason "merged"; everything else closed reads as completed. The
-# retired superseded state reads as dropped: the old question was abandoned.
-_LEGACY_STATES = {"open": "active", "closed": "completed", "superseded": "dropped"}
-
-
 def is_final(state: str | None) -> bool:
     """Merged, completed, or dropped: the thread has ended."""
     return state in FINAL_STATES
-
-
-def current_state(state: str, reason: str | None = None) -> str:
-    """Map a stored state value (possibly pre-rename) onto the current names."""
-    if state == "closed" and reason == "merged":
-        return "merged"
-    return _LEGACY_STATES.get(state, state)
 
 
 class ThreadError(Exception):

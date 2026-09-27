@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "threads/thread.schema.json",
   "title": "thread.yml — the thread's metadata",
-  "$comment": "What the thread is, edited by hand by people and agents; the tool writes it on create, reanchor (title) and reparent (parent). It is validated on every read. What happened lives in log.jsonl, and the thread's state (lifecycle, claims, counts, children, links) is computed from the log on read and never stored. Namespace is the folder. A thread.yml carrying state, tip or children is the older cache format; `thread migrate` turns it into this file. The same shape is recorded in each checkpoint's `metadata` block and in the `migrated` event, as the baseline for the view's 'thread.yml since the last checkpoint' line.",
+  "$comment": "What the thread is, edited by hand by people and agents; the tool writes it on create, reanchor (title) and reparent (parent). It is validated on every read. What happened lives in log.jsonl, and the thread's state (lifecycle, claims, counts, children, links) is computed from the log on read and never stored. Namespace is the folder. The same shape is recorded in each checkpoint's `metadata` block and in the `created` event, as the baseline for the view's 'thread.yml since the last checkpoint' line.",
   "type": "object",
   "required": [
     "title"
@@ -36,22 +36,6 @@
       "anyOf": [
         {
           "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "supersedes": {
-      "description": "Legacy pointer from the retired supersede command. Kept for old threads only; don't add it to new ones.",
-      "anyOf": [
-        {
-          "$ref": "common.schema.json#/$defs/threadId"
-        },
-        {
-          "type": "integer",
-          "minimum": 0,
-          "description": "an unquoted all-digit id, read as the id"
         },
         {
           "type": "null"

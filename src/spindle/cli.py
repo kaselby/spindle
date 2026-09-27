@@ -222,10 +222,6 @@ def parser() -> argparse.ArgumentParser:
     drop.add_argument("--force", action="store_true", help="move unfinished subthreads to this thread's parent")
     _common(drop, identity=True, data=True)
 
-    # Retired verb, kept off the help list: it only says what replaced it.
-    retired = commands.add_parser("close", add_help=False)
-    retired.add_argument("rest", nargs=argparse.REMAINDER)
-
     reopen = commands.add_parser("reopen", help="bring back a completed or dropped thread")
     reopen.add_argument("thread")
     _common(reopen, identity=True, data=True)
@@ -257,21 +253,16 @@ def parser() -> argparse.ArgumentParser:
     unlink.add_argument("target")
     _common(unlink, identity=True, data=True)
 
-    # Retired verb, kept off the help list: it only says what replaced it.
-    retired = commands.add_parser("supersede", add_help=False)
-    retired.add_argument("rest", nargs=argparse.REMAINDER)
-
     archive = commands.add_parser("archive", help="move finished threads (merged, completed, dropped) into threads/archived/")
     _common(archive, identity=True, data=True)
 
     listing = commands.add_parser("list", help="active threads as a tree by namespace: their state, who's working, events since checkpoint")
     listing.add_argument("--ns", help="only this namespace; `default` means threads created without one")
+    listing.add_argument(
+        "--flag", action="append", default=[], metavar="KEY[=VALUE]",
+        help="only threads whose thread.yml has this flag (with this value, if given); repeat to require several")
     _common(listing, identity=True, data=True)
 
-    migrate = commands.add_parser(
-        "migrate", help="one-time: move every thread's metadata into thread.yml (safe to run again)")
-    migrate.add_argument("--dry-run", action="store_true", help="say what would change; write nothing")
-    _common(migrate, identity=True, data=True)
 
     path = commands.add_parser("path", help="print a thread's folder")
     path.add_argument("thread")
@@ -320,6 +311,35 @@ def _validate_origin(body: str, *, reanchoring: bool = False) -> None:
             f"`## {PREVIOUS_ORIGIN}` belongs only in a reanchored origin (`thread reanchor`). "
             f"Remove it from a new thread's origin."
         )
+
+
+def _flag_filters(values: list[str]) -> list[tuple[str, str | None]]:
+    """`--flag key=value` or `--flag key` as (key, value or None). The split is at
+    the first `=`, so a value may contain one; a flag name can't."""
+    filters = []
+    for value in values:
+        key, has_value, wanted = value.partition("=")
+        if not key.strip():
+            raise ThreadError(f"--flag {value!r} names no flag; write --flag key=value, or --flag key for any value")
+        filters.append((key.strip(), wanted if has_value else None))
+    return filters
+
+
+def _flag_text(value: Any) -> str:
+    """A flag value as it would be typed: YAML's true/false, and blank for null."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return "" if value is None else str(value)
+
+
+def _has_flags(path: Path, filters: list[tuple[str, str | None]]) -> bool:
+    """Does the thread carry every flag asked for? One that can't be read is kept,
+    so the listing still counts it as unreadable rather than silently dropping it."""
+    try:
+        flags = summary.describe(path).get("flags") or {}
+    except summary.UNREADABLE:
+        return True
+    return all(key in flags and (wanted is None or _flag_text(flags[key]) == wanted) for key, wanted in filters)
 
 
 def _clean_namespace(value: str | None, source: str = "--ns") -> str | None:
@@ -408,22 +428,6 @@ def _create(
     return destination
 
 
-def _migrate_report(results: list[dict[str, Any]]) -> str:
-    lines = []
-    for item in results:
-        line = f"- {item['thread']}: {item['status']}"
-        if item.get("error"):
-            line += f": {item['error']}"
-        if item.get("metadata"):
-            line += " (" + ", ".join(f"{key}: {value}" for key, value in item["metadata"].items()) + ")"
-        lines.append(line)
-        lines += [f"  note: {note}" for note in item.get("notes", [])]
-    failed = sum(1 for item in results if item["status"] == "failed")
-    if failed:
-        lines.append(f"{failed} thread{'s' if failed != 1 else ''} failed and {'were' if failed != 1 else 'was'} left as they were; fix the error and run `thread migrate` again.")
-    return "\n".join(lines) + "\n" if lines else "No threads in the store.\n"
-
-
 def _emit(value: Any, *, as_json: bool = False) -> None:
     if as_json:
         print(json.dumps(value, ensure_ascii=False, indent=2))
@@ -492,20 +496,6 @@ def _size(path: Path) -> int:
 
 def run(args: argparse.Namespace) -> None:
     command = args.command
-    if command == "close":
-        raise ThreadError(
-            "`thread close` is gone: a thread now ends as completed or dropped, so the archive shows "
-            "which. `thread complete <id>` if the work is done (a subthread merges instead: "
-            "`thread merge <id>`); `thread drop <id>` if it isn't worth pursuing "
-            f"({guide.doc('completion-and-merging.md')})."
-        )
-    if command == "supersede":
-        raise ThreadError(
-            "`thread supersede` is gone. If the work continues under a new origin, use "
-            "`thread reanchor <id> --origin <file>`. If the question itself was wrong, "
-            "`thread drop <old>` (or `thread complete <old>`), create a new thread, then connect it "
-            "with `thread link <new> continues <old>`."
-        )
     if command == "init":
         root, how = scopes.locate(args.root)
         notes = scopes.start_project_store(root) if how == "project" else (initialize(root) or [])
@@ -575,16 +565,6 @@ def run(args: argparse.Namespace) -> None:
             _emit("\n".join(f"- {line}" for line in moved) + "\n" if moved else "Nothing to archive\n")
         return
 
-    if command == "migrate":
-        from . import migrate
-
-        results = migrate.run(root, by, dry_run=args.dry_run)
-        if args.json:
-            _emit(results, as_json=True)
-        else:
-            _emit(_migrate_report(results))
-        return
-
     if command == "list":
         paths = [path for path in iter_threads(root) if is_active(path)]
         for path in paths:
@@ -596,6 +576,9 @@ def run(args: argparse.Namespace) -> None:
         if args.ns is not None:
             wanted = _clean_namespace(args.ns)
             paths = [path for path in paths if namespace_of(path) == wanted]
+        filters = _flag_filters(args.flag)
+        if filters:
+            paths = [path for path in paths if _has_flags(path, filters)]
         if args.json:
             described = []
             for path in paths:
@@ -605,7 +588,10 @@ def run(args: argparse.Namespace) -> None:
                     continue
             _emit(described, as_json=True)
         else:
-            _emit(render.list_threads(root, paths, only=(wanted or "default") if args.ns is not None else None))
+            _emit(render.list_threads(
+                root, paths, only=(wanted or "default") if args.ns is not None else None,
+                flags=[key if value is None else f"{key}={value}" for key, value in filters],
+            ))
         return
 
     thread = resolve_thread(root, args.thread)

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .limits import LIMITS
-from .store import ThreadError, current_state
+from .store import ThreadError
 
 
 def now() -> datetime:
@@ -80,11 +80,9 @@ PAYLOAD_KEYS: dict[str, tuple[str, ...]] = {
     "origin-revised": ("revision",),
     "linked": ("kind", "target"), "unlinked": ("kind", "target"),
     "merged-into": ("parent", "checkpoint"),
-    "child-closed": ("child",), "child-dropped": ("child",), "child-reopened": ("child",),
-    "child-superseded": ("child", "successor"),
+    "child-dropped": ("child",), "child-reopened": ("child",),
     "child-adopted": ("child", "title"),
     "reparented": ("from", "to"),
-    "migrated": ("metadata",),
 }
 
 
@@ -167,7 +165,7 @@ def lifecycle_state(log: list[dict[str, Any]]) -> str:
     """Just the state: the last state-changed event, else active."""
     for event in reversed(log):
         if event["type"] == "state-changed":
-            return current_state(event["payload"]["to"], event["payload"].get("reason"))
+            return event["payload"]["to"]
     return "active"
 
 
@@ -182,7 +180,6 @@ def state(thread: Path, log: list[dict[str, Any]] | None = None) -> dict[str, An
     claims: dict[str, dict[str, Any]] = {}
     latest_checkpoint: dict[str, Any] | None = None
     last_checkpoint_index = -1
-    superseded_by: str | None = None
 
     for index, event in enumerate(log):
         session = event["by"]["session"]
@@ -197,8 +194,7 @@ def state(thread: Path, log: list[dict[str, Any]] | None = None) -> dict[str, An
         elif kind == "release":
             claims.pop(payload.get("session", session), None)
         elif kind == "state-changed":
-            lifecycle = current_state(payload["to"], payload.get("reason"))
-            superseded_by = payload.get("successor", payload.get("superseded-by", superseded_by))
+            lifecycle = payload["to"]
         elif kind == "checkpoint":
             latest_checkpoint = {
                 "id": payload["checkpoint"], "ts": event["ts"], "headline": payload["headline"]
@@ -222,8 +218,6 @@ def state(thread: Path, log: list[dict[str, Any]] | None = None) -> dict[str, An
         "links": links(log),
         "scratch-newer-than-checkpoint": scratch_newer(thread, latest_checkpoint),
     }
-    if superseded_by:
-        result["superseded-by"] = superseded_by
     if latest_checkpoint:
         result["last-checkpoint"] = latest_checkpoint
     return result
@@ -279,13 +273,10 @@ def event_summary(event: dict[str, Any], *, full_note: bool = False) -> str:
     return ", ".join(pieces) or "-"
 
 
-# Lifecycle bookkeeping written by merge/complete/drop and by shelving, and
-# the one-time `migrated` baseline, are not "work since the checkpoint": they
-# are left out of the count everywhere.
 # What displays leave out of "events since the last checkpoint": the bookkeeping a
 # lifecycle verb writes after the checkpoint it closes over. Claims and releases
 # are shown and counted like anything else.
-BOOKKEEPING = frozenset({"merged-into", "state-changed", "migrated"})
+BOOKKEEPING = frozenset({"merged-into", "state-changed"})
 
 # The one rule the GATES use (release gate, clean gate, CAS): does this event
 # carry anything a checkpoint writer needs to have read? Presence (claim,
@@ -294,14 +285,14 @@ BOOKKEEPING = frozenset({"merged-into", "state-changed", "migrated"})
 # Links are display-only (they never gate), so they are shown and counted but
 # are not work a checkpoint writer must have read.
 NOT_WORK = frozenset({
-    "created", "claim", "release", "merged-into", "state-changed", "linked", "unlinked", "migrated",
+    "created", "claim", "release", "merged-into", "state-changed", "linked", "unlinked",
 })
 
 
 def is_activity(event: dict[str, Any]) -> bool:
-    """Somebody wrote this: not the doctor's upkeep, not the migration's baseline.
+    """Somebody wrote this: not the doctor's upkeep.
     Decides when a thread last saw activity (shelving, list order)."""
-    return event["by"]["session"] != "doctor" and event["type"] != "migrated"
+    return event["by"]["session"] != "doctor"
 
 
 def carries_work(event: dict[str, Any]) -> bool:

@@ -153,7 +153,7 @@ established convention in place.
 
 | Command | What it does |
 |---|---|
-| `thread list [--ns <name>]` | active and inactive threads |
+| `thread list [--ns <name>] [--flag key[=value]]` | active and inactive threads |
 | `thread view <id> [--deep]` | the orientation page. `--deep` includes subthreads' histories |
 | `thread claim` / `release <id>` | start / stop working on a thread |
 | `thread note <id> "text"` | record a finding (not shown on the view page) |

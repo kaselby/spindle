@@ -42,8 +42,7 @@ def _may_name(thread: Path, identifier: str) -> bool:
     """Could this unreadable thread be a subthread of ``identifier``? Only where
     a parent gets set counts, so a note, a checkpoint or a link that merely
     mentions the id doesn't: a thread.yml line with `parent` and the id, or in
-    the log `"parent":"<id>"` (the `created` payload, and `migrated`'s copy of
-    thread.yml) or `"to":"<id>"` (`reparented`). events.append writes compact
+    the log `"parent":"<id>"` (the `created` payload) or `"to":"<id>"` (`reparented`). events.append writes compact
     JSON, so those bytes are stable. A thread.yml that's missing or can't be
     read falls through to the log test; a log that can't be read is unknown,
     so yes."""
@@ -134,14 +133,14 @@ def linked_from(root: Path, identifier: str) -> list[tuple[Path, dict[str, str]]
 def metadata_baseline(thread: Path, log: list[dict[str, Any]]) -> dict[str, Any] | None:
     """thread.yml as it was at the latest checkpoint, for the view's "what
     changed" line. The newest of: a checkpoint's `metadata` block, the
-    `migrated` event, the `created` event. None when that checkpoint predates
+    `created` event. None when that checkpoint predates
     the block (nothing to compare against). A `reparented` event after it is
     the tool's own edit, logged, so the baseline takes that parent too."""
     baseline = _baseline_event(thread, log)
     if baseline is None:
         return None
     for event in reversed(log):
-        if event["type"] in ("checkpoint", "migrated", "created"):
+        if event["type"] in ("checkpoint", "created"):
             break
         if event["type"] == "reparented":
             baseline["parent"] = event.get("payload", {}).get("to")
@@ -162,8 +161,6 @@ def _baseline_event(thread: Path, log: list[dict[str, Any]]) -> dict[str, Any] |
                 return None
             block = front.get("metadata")
             return metadata.baseline_from(block) if isinstance(block, dict) else None
-        if kind == "migrated":
-            return metadata.baseline_from(payload.get("metadata") or {})
         if kind == "created":
             return metadata.baseline_from(payload)
     return None

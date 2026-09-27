@@ -30,7 +30,7 @@ FILE = "thread.yml"
 THREAD_ID = re.compile(r"^[a-z0-9]{6,12}$")
 
 # Known top-level keys, in the order the tool writes them.
-KEYS = ("title", "parent", "from-task", "supersedes", "flags")
+KEYS = ("title", "parent", "from-task", "flags")
 
 # The shape, printed when a bad file has no committed version to restore.
 SCHEMA = """\
@@ -40,10 +40,6 @@ from-task: <task id>                          # set by `thread promote`
 flags:                                        # optional: your own keys, scalar values
   kiln.autonomous: true                       #   prefix keys with your tool's name
 """
-
-# Keys only the old cache had. Their presence means the store predates this
-# model and needs `thread migrate`, not a hand fix.
-_CACHE_KEYS = {"state", "tip", "events-since-checkpoint", "claims", "children", "last-event"}
 
 
 class MetadataError(ThreadError):
@@ -96,13 +92,6 @@ def _scalar(value: Any) -> bool:
 def _validate(thread: Path, value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise _refuse(thread, [f"it must be a mapping of keys to values, not {type(value).__name__}"])
-    stale = sorted(_CACHE_KEYS & set(value))
-    if stale:
-        raise MetadataError(
-            f"{thread.name}/{FILE} is in the old format, a summary the tool rebuilt from the log "
-            f"(it has {', '.join(stale)}). Run `thread migrate` once to turn every thread's thread.yml "
-            "into its metadata file."
-        )
     problems: list[str] = []
     result: dict[str, Any] = {}
     for key, item in value.items():
@@ -121,7 +110,7 @@ def _validate(thread: Path, value: Any) -> dict[str, Any]:
                 problems.append("`title` must be text, one line of at most 80 characters")
             elif "\n" in item.strip() or len(item) > 80:
                 problems.append(f"`title` must be one line of at most 80 characters; it is {len(item)}")
-        elif key in ("parent", "supersedes"):
+        elif key == "parent":
             if isinstance(item, int) and not isinstance(item, bool):
                 item = str(item)  # an all-digit id typed without quotes reads as a number
             if not isinstance(item, str) or not THREAD_ID.match(item):
@@ -165,7 +154,7 @@ def read(thread: Path) -> dict[str, Any]:
         root, relative = _relative(thread)
         restore = (
             f" Restore it: git -C {root} checkout -- {relative}" if _committed(root, relative)
-            else " If this store predates thread.yml as metadata, run `thread migrate`."
+            else " Write one by hand; it should look like this:\n" + "\n".join(f"  {line}" for line in SCHEMA.splitlines())
         )
         raise MetadataError(f"{thread.name} has no {FILE}.{restore}")
     try:
@@ -191,7 +180,7 @@ def dump(value: dict[str, Any]) -> str:
 
 
 def write(thread: Path, value: dict[str, Any]) -> None:
-    """Write the whole file (create and migrate)."""
+    """Write the whole file (create)."""
     atomic_text(path_of(thread), dump(value))
 
 

@@ -76,14 +76,6 @@ def _registration_target(thread: Path, payload: dict[str, Any]) -> Path | None:
     return owner / relative
 
 
-def kind_of(registration: dict[str, Any]) -> str:
-    """doc, artifact or reading-guide, by path. Registrations written before the
-    change carry one of twelve retired kinds; the folder always decided the section."""
-    if registration["path"] == guide.READING_GUIDE:
-        return "reading-guide"
-    return "doc" if registration["path"].startswith("docs/") else "artifact"
-
-
 def _entry_details(thread: Path, payload: dict[str, Any], date: str, *, artifact: bool) -> str:
     details: list[str] = []
     target = _registration_target(thread, payload)
@@ -133,13 +125,13 @@ def _index_lines(thread: Path, *, artifact_limit: int | None, pointers: bool = T
             lines.append(f"- … {hidden} more; see `{thread / 'index.md'}`")
     else:
         lines.append("- None.")
-    guides = [item for item in carried if kind_of(item["registration"]) == "reading-guide"]
+    guides = [item for item in carried if item["registration"]["kind"] == "reading-guide"]
     if guides and pointers:
         lines += ["", "## Reading guides of merged subthreads"]
         lines += [f"- {_name(item)}" + (f" — {item['registration']['purpose']}" if item["registration"].get("purpose") else "")
                   for item in guides]
     if carried and not pointers:
-        by_kind = [kind_of(item["registration"]) for item in carried]
+        by_kind = [item["registration"]["kind"] for item in carried]
         counts = ", ".join(part for part in (
             _plural(by_kind.count("doc"), "doc") if by_kind.count("doc") else "",
             _plural(by_kind.count("artifact"), "artifact") if by_kind.count("artifact") else "",
@@ -324,12 +316,6 @@ def _related_rows(root: Path, thread: Path, cache: dict[str, Any]) -> list[str]:
             f"- {reverse_labels[link['kind']]} {summary.thread_id(other)}: "
             f"{metadata.title_or_name(other)}{suffix}"
         )
-
-    # Old stores can still carry the retired supersede pointers.
-    if cache.get("supersedes"):
-        rows.append(f"- Replaces {cache['supersedes']} (`thread view {cache['supersedes']}`)")
-    if cache.get("superseded-by"):
-        rows.append(f"- Replaced by {cache['superseded-by']}")
     return rows
 
 
@@ -517,16 +503,19 @@ def replay(
     ) + "\n"
 
 
-def list_threads(root: Path, paths: list[Path], *, only: str | None = None) -> str:
+def list_threads(root: Path, paths: list[Path], *, only: str | None = None, flags: list[str] | None = None) -> str:
     """Every thread as a tree, grouped by namespace (default first), with a single
     footer. Subthreads are indented under their parent (see tree.py); one line per
     thread with its state, who's working, and events since checkpoint. ``only`` is
-    the namespace `--ns` filtered to, if any.
+    the namespace `--ns` filtered to, if any; ``flags`` the `--flag` filters.
 
     With no namespaced threads there is one group and no heading, as before
     namespaces existed; otherwise every group, the default included, gets one.
     """
     if not paths:
+        if flags:
+            where = f" in namespace {only}" if only is not None else ""
+            return f"No active threads{where} with {', '.join(flags)}. `thread list` shows every active thread.\n"
         if only is not None:
             return f"No active threads in namespace {only}. `thread list` shows every namespace.\n"
         return "No active threads. `thread create \"title\"` prints the origin template to start one.\n"
