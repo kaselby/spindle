@@ -264,6 +264,11 @@ def event_summary(event: dict[str, Any], *, full_note: bool = False) -> str:
         if payload.get("skipped-checkpoint"):
             return f"released, skipped checkpoint: {payload['skipped-checkpoint']}"
         return "released"
+    registration = payload.get("registration") if event["type"] == "register" else None
+    if registration and registration.get("kind") == "reading-guide":
+        where = f" (from {payload['pointer'].split('@', 1)[0]})" if payload.get("pointer") else ""
+        note = f": {registration['purpose']}" if registration.get("purpose") else ""
+        return f"reading guide updated{where}{note}"
     pieces = []
     for key, value in payload.items():
         if isinstance(value, (dict, list)):

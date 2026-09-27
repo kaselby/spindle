@@ -194,7 +194,7 @@ def _register(parent: Path, registration: dict[str, Any], by: dict[str, str], **
 
 
 def _registered(thread: Path) -> dict[str, dict[str, Any]]:
-    """Registered docs/artifacts held in this thread, newest registration wins.
+    """Registered docs/artifacts (and the reading guide) held in this thread, newest registration wins.
     Pointers are other threads' files, so they are not promotable."""
     found: dict[str, dict[str, Any]] = {}
     for payload, _ in render.registrations(thread):
@@ -308,11 +308,12 @@ def merge(
     rolling_ids = {task.get("id") for task in rolling}
     left_tasks = sum(1 for task in board if not task.get("done") and task.get("id") not in rolling_ids)
     left_docs = sum(1 for relative in pointers if relative.startswith("docs/"))
+    left_artifacts = sum(1 for relative in pointers if relative.startswith("artifacts/"))
 
     def facts(moved: list[tuple[str, str | None]]) -> str:
         return guide.merge_facts(
             child_id, parent_id, child_cid, _headline(child), wanted, moved,
-            left_docs, len(pointers) - left_docs, left_tasks,
+            left_docs, left_artifacts, left_tasks,
         )
 
     if body is None:

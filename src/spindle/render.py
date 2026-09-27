@@ -77,8 +77,10 @@ def _registration_target(thread: Path, payload: dict[str, Any]) -> Path | None:
 
 
 def kind_of(registration: dict[str, Any]) -> str:
-    """doc or artifact, by folder. Registrations written before the change
-    carry one of twelve retired kinds; the folder always decided the section."""
+    """doc, artifact or reading-guide, by path. Registrations written before the
+    change carry one of twelve retired kinds; the folder always decided the section."""
+    if registration["path"] == guide.READING_GUIDE:
+        return "reading-guide"
     return "doc" if registration["path"].startswith("docs/") else "artifact"
 
 
@@ -125,13 +127,21 @@ def _index_lines(thread: Path, *, artifact_limit: int | None, pointers: bool = T
             lines.append(f"- … {hidden} more; see `{thread / 'index.md'}`")
     else:
         lines.append("- None.")
+    guides = [item for item in carried if kind_of(item["registration"]) == "reading-guide"]
+    if guides and pointers:
+        lines += ["", "## Reading guides of merged subthreads"]
+        lines += [f"- {_name(item)}" + (f" — {item['registration']['purpose']}" if item["registration"].get("purpose") else "")
+                  for item in guides]
     if carried and not pointers:
-        docs_left = sum(1 for item in carried if item["registration"]["path"].startswith("docs/"))
-        artifacts_left = len(carried) - docs_left
-        counts = " and ".join(part for part in (
-            _plural(docs_left, "doc") if docs_left else "",
-            _plural(artifacts_left, "artifact") if artifacts_left else "",
+        by_kind = [kind_of(item["registration"]) for item in carried]
+        counts = ", ".join(part for part in (
+            _plural(by_kind.count("doc"), "doc") if by_kind.count("doc") else "",
+            _plural(by_kind.count("artifact"), "artifact") if by_kind.count("artifact") else "",
+            _plural(by_kind.count("reading-guide"), "reading guide") if by_kind.count("reading-guide") else "",
         ) if part)
+        if ", " in counts:
+            head, _, last = counts.rpartition(", ")
+            counts = f"{head} and {last}"
         verb = "remains" if len(carried) == 1 else "remain"
         lines += ["", f"*{counts} {verb} in merged subthreads; `{thread / 'index.md'}` lists them.*"]
     return lines

@@ -294,6 +294,62 @@ def test_the_view_shows_the_reading_guide_before_the_docs(root, make_thread, run
     assert "reading-guide" not in (path / "index.md").read_text(encoding="utf-8")
 
 
+def test_register_records_the_reading_guide(root, make_thread, run):
+    identifier = make_thread()
+    path = store.resolve_thread(root, identifier)
+    missing = run("register", identifier, "reading-guide.md", "--kind", "reading-guide", "--root", root)
+    assert missing.code != 0 and "doesn't exist" in missing.err
+
+    (path / "reading-guide.md").write_text("<!-- hidden -->\n1. `docs/a.md`\n", encoding="utf-8")
+    first = run("register", identifier, "reading-guide.md", "--kind", "reading-guide", "--root", root)
+    assert first.code == 0, first.err
+    assert "(14 of 1,500 characters)" in first.out and "over the cap" not in first.out
+    changed = run("register", identifier, "reading-guide.md", "--kind", "reading-guide",
+                  "--purpose", "added the parser branch", "--root", root)
+    assert changed.code == 0, changed.err
+
+    replay = run("replay", identifier, "--root", root).out
+    assert "register by" in replay and "reading guide updated\n" in replay
+    assert "reading guide updated: added the parser branch" in replay
+    # Not a doc or artifact: the index and the view's list leave it out.
+    assert "reading-guide" not in (path / "index.md").read_text(encoding="utf-8")
+    assert "remain in merged" not in run("view", identifier, "--root", root).out
+
+    (path / "reading-guide.md").write_text("x" * (LIMITS["reading_guide_chars"] + 1), encoding="utf-8")
+    over = run("register", identifier, "reading-guide.md", "--kind", "reading-guide", "--root", root)
+    assert over.code == 0 and "over the cap" in over.out
+
+
+def test_register_reading_guide_refuses_the_wrong_shape(root, make_thread, run):
+    identifier = make_thread()
+    path = store.resolve_thread(root, identifier)
+    (path / "reading-guide.md").write_text("1. x\n", encoding="utf-8")
+    (path / "docs" / "a.md").write_text("x", encoding="utf-8")
+    wrong_path = run("register", identifier, "docs/a.md", "--kind", "reading-guide", "--root", root)
+    assert wrong_path.code != 0 and "reading-guide.md at the thread root" in wrong_path.err
+    read_when = run("register", identifier, "reading-guide.md", "--kind", "reading-guide",
+                    "--read-when", "always", "--root", root)
+    assert read_when.code != 0 and "--read-when is for docs" in read_when.err
+    as_doc = run("register", identifier, "reading-guide.md", "--kind", "doc", "--purpose", "p",
+                 "--read-when", "r", "--root", root)
+    assert as_doc.code != 0
+    # Docs and artifacts still need a purpose.
+    no_purpose = run("register", identifier, "docs/a.md", "--kind", "doc", "--read-when", "r", "--root", root)
+    assert no_purpose.code != 0 and "--purpose" in no_purpose.err
+
+
+def test_doctor_flags_an_unregistered_reading_guide(root, make_thread, run):
+    identifier = make_thread()
+    path = store.resolve_thread(root, identifier)
+    (path / "reading-guide.md").write_text("1. x\n", encoding="utf-8")
+    findings = json.loads(run("doctor", identifier, "--root", root, "--json").out)[identifier]
+    assert any(name == "unregistered" and detail.startswith("reading-guide.md isn't registered")
+               and "--kind reading-guide" in detail for name, detail in findings)
+    assert run("register", identifier, "reading-guide.md", "--kind", "reading-guide", "--root", root).code == 0
+    findings = json.loads(run("doctor", identifier, "--root", root, "--json").out)[identifier]
+    assert not any(name == "unregistered" for name, _ in findings)
+
+
 def test_doctor_checks_the_reading_guides_cap_and_local_paths(root, make_thread, run, tmp_path):
     other = make_thread("Other thread")
     identifier = make_thread("Guided")

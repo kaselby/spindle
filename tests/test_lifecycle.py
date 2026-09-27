@@ -814,3 +814,30 @@ def test_claim_and_release_do_not_block_a_merge(root, run, body, family):
     assert run("release", family["parent"], "--root", root).code == 0
     result = run("merge", family["child"], "--body", body(_merge_text(family["child"])), "--root", root)
     assert result.code == 0, result.err
+
+
+def test_merge_carries_the_childs_reading_guide_as_a_pointer(root, run, body, loaded):
+    parent, child = loaded["parent"], loaded["child"]
+    (loaded["child_path"] / "reading-guide.md").write_text("1. `docs/guide.md`\n", encoding="utf-8")
+    assert run("register", child, "reading-guide.md", "--kind", "reading-guide",
+               "--purpose", "start here", "--root", root).code == 0
+    _cp(run, root, body, child, CHILD_BODY)
+    assert run("merge", child, "--promote", "docs/guide.md", "--body", body(_merge_text(child)),
+               "--root", root).code == 0
+    view = run("view", parent, "--root", root).out
+    index_path = loaded["parent_path"] / "index.md"
+    assert f"*2 artifacts and 1 reading guide remain in merged subthreads; `{index_path}` lists them.*" in view
+    index = index_path.read_text(encoding="utf-8")
+    assert f"## Reading guides of merged subthreads\n- → **{child}:reading-guide.md** — start here" in index
+    assert not (loaded["parent_path"] / "reading-guide.md").exists()
+
+
+def test_merge_can_promote_the_reading_guide_when_the_parent_has_none(root, run, body, loaded):
+    parent, child = loaded["parent"], loaded["child"]
+    (loaded["child_path"] / "reading-guide.md").write_text("1. `docs/guide.md`\n", encoding="utf-8")
+    assert run("register", child, "reading-guide.md", "--kind", "reading-guide", "--root", root).code == 0
+    _cp(run, root, body, child, CHILD_BODY)
+    assert run("merge", child, "--promote", "reading-guide.md", "docs/guide.md",
+               "--body", body(_merge_text(child)), "--root", root).code == 0
+    assert (loaded["parent_path"] / "reading-guide.md").read_text() == "1. `docs/guide.md`\n"
+    assert "# Reading guide\n1. `docs/guide.md`" in run("view", parent, "--root", root).out

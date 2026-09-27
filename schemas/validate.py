@@ -45,6 +45,13 @@ cases = {
   ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"pending","registration":{"path":"artifacts/a.csv","kind":"doc","purpose":"p"}}}, False),
   ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"pending","registration":{"path":"docs/a.md","kind":"artifact","purpose":"p","read-when":"r"}}}, False),
   ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"pending","registration":{"path":"docs/a.md","kind":"notes","purpose":"p","read-when":"r"}}}, False),
+  # The reading guide: its own path, purpose optional, no read-when; the others still need a purpose.
+  ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"pending","registration":{"path":"reading-guide.md","kind":"reading-guide"}}}, True),
+  ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"c0003","registration":{"path":"reading-guide.md","kind":"reading-guide","purpose":"added the parser branch"},"pointer":"k7q2m9:reading-guide.md@c0003"}}, True),
+  ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"pending","registration":{"path":"docs/guide.md","kind":"reading-guide"}}}, False),
+  ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"pending","registration":{"path":"reading-guide.md","kind":"reading-guide","read-when":"r"}}}, False),
+  ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"pending","registration":{"path":"reading-guide.md","kind":"doc","purpose":"p","read-when":"r"}}}, False),
+  ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"pending","registration":{"path":"artifacts/a.csv","kind":"artifact"}}}, False),
   ({"id":E2,"ts":TS,"by":ident,"type":"claim","payload":{"intent":"drafting"}}, True),
   ({"id":E2,"ts":TS,"by":ident,"type":"claim"}, True),
   ({"id":E7,"ts":TS,"by":ident,"type":"state-changed","payload":{"from":"inactive","to":"open"}}, True),

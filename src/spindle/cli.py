@@ -21,9 +21,10 @@ from .store import (
 )
 
 ORIGIN_TEMPLATE = guide.ORIGIN_TEMPLATE
-# A registration is a doc (docs/, read to understand the work) or an artifact
-# (artifacts/, what the work produced). The kind must match the folder.
-KINDS = ["doc", "artifact"]
+# A registration is a doc (docs/, read to understand the work), an artifact
+# (artifacts/, what the work produced), or the thread's reading guide
+# (reading-guide.md at the thread root). The kind must match the path.
+KINDS = ["doc", "artifact", "reading-guide"]
 KIND_FOLDER = {"doc": "docs", "artifact": "artifacts"}
 LINK_KINDS = ["related", "blocked-by", "continues"]
 
@@ -164,12 +165,16 @@ def parser() -> argparse.ArgumentParser:
     promote.add_argument("--ns", help=f"{guide.NAMESPACE_HELP} (default: the parent's)")
     _common(promote, identity=True, data=True)
 
-    register = commands.add_parser("register", help="list a file or directory in docs/ or artifacts/ on the view page")
+    register = commands.add_parser(
+        "register", help="list a file or directory in docs/ or artifacts/ on the view page, "
+                         "or record that the reading guide was written or changed")
     register.add_argument("thread")
-    register.add_argument("path", help="relative to the thread folder, under docs/ or artifacts/")
+    register.add_argument("path", help="relative to the thread folder: under docs/ or artifacts/, or reading-guide.md")
     register.add_argument("--kind", required=True, choices=KINDS,
-                          help="doc (under docs/) or artifact (under artifacts/); must match the folder")
-    register.add_argument("--purpose", required=True, help="what it is, at most 160 characters")
+                          help="doc (under docs/), artifact (under artifacts/), or reading-guide (reading-guide.md); "
+                               "must match the path")
+    register.add_argument("--purpose", help="what it is, at most 160 characters (for a reading guide: optional, "
+                                            "what changed)")
     register.add_argument("--read-when", help="when a reader should open it (required for docs)")
     _common(register, identity=True, data=True)
 
@@ -450,6 +455,37 @@ def _registration_path(thread: Path, value: str) -> tuple[str, Path]:
     return normalized.as_posix(), path
 
 
+def _register_reading_guide(thread: Path, identifier: str, args: argparse.Namespace, by: dict[str, str]) -> None:
+    """Record that the reading guide was written or changed. The view shows the
+    file itself; the event puts the change in the log and on replay."""
+    if PurePosixPath(args.path).as_posix() != guide.READING_GUIDE:
+        raise ThreadError(
+            f"--kind reading-guide is for {guide.READING_GUIDE} at the thread root; got {args.path}. "
+            f"`thread register {identifier} {guide.READING_GUIDE} --kind reading-guide`."
+        )
+    path = thread / guide.READING_GUIDE
+    if not path.is_file():
+        raise ThreadError(f"{path} doesn't exist. Write the guide there first, then register it.")
+    if args.read_when:
+        raise ThreadError("--read-when is for docs; the view page always shows the reading guide.")
+    if args.purpose is not None and not 1 <= len(args.purpose.strip()) <= 160:
+        raise ThreadError(f"--purpose must be 1–160 characters; it is {len(args.purpose.strip())}.")
+    size = len(strip_comments(path.read_text(encoding="utf-8", errors="replace")).strip())
+    cap = LIMITS["reading_guide_chars"]
+    registration: dict[str, str] = {"path": guide.READING_GUIDE, "kind": "reading-guide"}
+    if args.purpose:
+        registration["purpose"] = args.purpose.strip()
+    checkpoint_id = events.state(thread).get("last-checkpoint", {}).get("id", "pending")
+    event = events.append(thread, "register", {"registration": registration, "checkpoint": checkpoint_id}, by)
+    over = size > cap
+    value = {**event, "chars": size, "cap": cap}
+    text = f"Registered the reading guide at {event['id']} ({size:,} of {cap:,} characters)\n"
+    if over:
+        text += ("It is over the cap. Trim it to pointers and a reading order; "
+                 "status and next steps belong in the checkpoint.\n")
+    _emit(value if args.json else text, as_json=args.json)
+
+
 def _size(path: Path) -> int:
     return path.stat().st_size if path.is_file() else sum(item.stat().st_size for item in path.rglob("*") if item.is_file())
 
@@ -726,7 +762,11 @@ def run(args: argparse.Namespace) -> None:
         tasks.promote(thread, args.task_id, child_id, by)
         value = {"id": child_id, "path": str(child)}
         _emit(value if args.json else f"Promoted {args.task_id} to {child_id}\n", as_json=args.json)
+    elif command == "register" and args.kind == "reading-guide":
+        _register_reading_guide(thread, identifier, args, by)
     elif command == "register":
+        if args.purpose is None:
+            raise ThreadError('register needs --purpose "<what it is>" (1–160 characters).')
         relpath, path = _registration_path(thread, args.path)
         folder = relpath.split("/", 1)[0]
         if KIND_FOLDER[args.kind] != folder:
