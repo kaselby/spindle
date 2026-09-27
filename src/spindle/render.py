@@ -97,8 +97,14 @@ def _entry_details(thread: Path, payload: dict[str, Any], date: str, *, artifact
 
 def _index_lines(thread: Path, *, artifact_limit: int | None, pointers: bool = True) -> list[str]:
     """The docs and artifacts sections. With ``pointers=False`` (the view page),
-    entries that point into merged children collapse to one count line."""
-    rows = registrations(thread)
+    entries that point into merged children collapse to one count line. A path
+    registered again shows once, with its newest registration."""
+    newest: dict[tuple[str, str | None], tuple[dict[str, Any], str]] = {}
+    for item, date in registrations(thread):
+        key = (item["registration"]["path"], item.get("pointer", "").split("@", 1)[0] or None)
+        newest.pop(key, None)  # re-insert so order follows the newest registration
+        newest[key] = (item, date)
+    rows = list(newest.values())
     carried = [item for item, _ in rows if item.get("pointer")]
     if not pointers:
         rows = [(item, date) for item, date in rows if not item.get("pointer")]

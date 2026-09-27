@@ -294,6 +294,19 @@ def test_the_view_shows_the_reading_guide_before_the_docs(root, make_thread, run
     assert "reading-guide" not in (path / "index.md").read_text(encoding="utf-8")
 
 
+def test_registering_a_path_again_replaces_its_entry(root, make_thread, run):
+    identifier = make_thread()
+    path = store.resolve_thread(root, identifier)
+    (path / "artifacts" / "a.csv").write_text("a\n", encoding="utf-8")
+    for purpose in ("first version", "second version"):
+        assert run("register", identifier, "artifacts/a.csv", "--kind", "artifact",
+                   "--purpose", purpose, "--root", root).code == 0
+    for text in (run("view", identifier, "--root", root).out, (path / "index.md").read_text(encoding="utf-8")):
+        listing = text[text.index("## Artifacts"):]
+        assert listing.count("**artifacts/a.csv**") == 1
+        assert "second version" in listing and "first version" not in listing
+
+
 def test_register_records_the_reading_guide(root, make_thread, run):
     identifier = make_thread()
     path = store.resolve_thread(root, identifier)
