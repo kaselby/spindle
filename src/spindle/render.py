@@ -93,8 +93,13 @@ def _entry_details(thread: Path, payload: dict[str, Any], date: str, *, artifact
     return ", ".join(details)
 
 
-def _index_lines(thread: Path, *, artifact_limit: int | None) -> list[str]:
+def _index_lines(thread: Path, *, artifact_limit: int | None, pointers: bool = True) -> list[str]:
+    """The docs and artifacts sections. With ``pointers=False`` (the view page),
+    entries that point into merged children collapse to one count line."""
     rows = registrations(thread)
+    carried = [item for item, _ in rows if item.get("pointer")]
+    if not pointers:
+        rows = [(item, date) for item, date in rows if not item.get("pointer")]
     docs = [(item, date) for item, date in rows if item["registration"]["path"].startswith("docs/")]
     artifacts = [(item, date) for item, date in rows if item["registration"]["path"].startswith("artifacts/")]
     lines = ["## Docs — read these when…"]
@@ -120,6 +125,15 @@ def _index_lines(thread: Path, *, artifact_limit: int | None) -> list[str]:
             lines.append(f"- … {hidden} more; see `{thread / 'index.md'}`")
     else:
         lines.append("- None.")
+    if carried and not pointers:
+        docs_left = sum(1 for item in carried if item["registration"]["path"].startswith("docs/"))
+        artifacts_left = len(carried) - docs_left
+        counts = " and ".join(part for part in (
+            _plural(docs_left, "doc") if docs_left else "",
+            _plural(artifacts_left, "artifact") if artifacts_left else "",
+        ) if part)
+        verb = "remains" if len(carried) == 1 else "remain"
+        lines += ["", f"*{counts} {verb} in merged subthreads; `{thread / 'index.md'}` lists them.*"]
     return lines
 
 
@@ -223,7 +237,7 @@ def _children_rows(
 
 def _index_body(thread: Path) -> list[str]:
     """The capped docs/artifacts summary embedded in the orientation page."""
-    return _index_lines(thread, artifact_limit=LIMITS["artifact_index"])
+    return _index_lines(thread, artifact_limit=LIMITS["artifact_index"], pointers=False)
 
 
 

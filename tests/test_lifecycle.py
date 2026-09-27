@@ -178,6 +178,18 @@ def test_merge_index_renders_pointers_as_arrows(root, run, body, loaded):
     assert "- **docs/guide.md** — orientation" in index
 
 
+def test_the_view_counts_pointers_instead_of_listing_them(root, run, body, loaded):
+    parent, child = loaded["parent"], loaded["child"]
+    assert run("merge", child, "--promote", "docs/guide.md", "--body", body(_merge_text(child)),
+               "--root", root).code == 0
+    view = run("view", parent, "--root", root).out
+    assert "- **docs/guide.md** — orientation" in view  # promoted: the parent's own
+    assert f"{child}:artifacts" not in view
+    index_path = loaded["parent_path"] / "index.md"
+    assert f"*2 artifacts remain in merged subthreads; `{index_path}` lists them.*" in view
+
+
+
 def test_merge_refuses_a_thread_with_no_parent(root, run, body, make_thread):
     identifier = make_thread("Root thread")
     _cp(run, root, body, identifier, PARENT_BODY)
