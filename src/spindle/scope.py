@@ -44,7 +44,7 @@ def write_scope(value: str) -> None:
 
 def locate(value: str | Path | None = None) -> tuple[Path, str]:
     """(store path, 'explicit' | 'global' | 'project'). The path may not exist yet."""
-    chosen = value or os.environ.get("SPINDLE_ROOT") or os.environ.get("THREADS_ROOT")
+    chosen = value or os.environ.get("SPINDLE_ROOT")
     if chosen:
         return Path(chosen).expanduser().resolve(), "explicit"
     if scope() == "project":

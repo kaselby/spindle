@@ -30,7 +30,7 @@ FILE = "thread.yml"
 THREAD_ID = re.compile(r"^[a-z0-9]{6,12}$")
 
 # Known top-level keys, in the order the tool writes them.
-KEYS = ("title", "parent", "from-task", "supersedes", "flags")
+KEYS = ("title", "parent", "from-task", "flags")
 
 # The shape, printed when a bad file has no committed version to restore.
 SCHEMA = """\
@@ -110,7 +110,7 @@ def _validate(thread: Path, value: Any) -> dict[str, Any]:
                 problems.append("`title` must be text, one line of at most 80 characters")
             elif "\n" in item.strip() or len(item) > 80:
                 problems.append(f"`title` must be one line of at most 80 characters; it is {len(item)}")
-        elif key in ("parent", "supersedes"):
+        elif key == "parent":
             if isinstance(item, int) and not isinstance(item, bool):
                 item = str(item)  # an all-digit id typed without quotes reads as a number
             if not isinstance(item, str) or not THREAD_ID.match(item):

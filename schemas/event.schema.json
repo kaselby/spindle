@@ -31,10 +31,8 @@
         "linked",
         "unlinked",
         "merged-into",
-        "child-closed",
         "child-dropped",
         "child-reopened",
-        "child-superseded",
         "child-adopted",
         "reparented",
         "reopened"
@@ -55,7 +53,6 @@
             "parent": { "$ref": "common.schema.json#/$defs/threadId" },
             "from-task": { "type": "string" },
             "flags": { "$ref": "thread.schema.json#/properties/flags" },
-            "supersedes": { "description": "Legacy: supersede was retired; never written now.", "$ref": "common.schema.json#/$defs/threadId" },
             "namespace": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$" }
           }
         } },
@@ -200,11 +197,9 @@
           "type": "object", "additionalProperties": false,
           "required": ["from", "to"],
           "properties": {
-            "from": { "$ref": "common.schema.json#/$defs/loggedThreadState" },
-            "to": { "$ref": "common.schema.json#/$defs/loggedThreadState" },
-            "reason": { "description": "Free text. The doctor gives its reason for shelving; the tool writes reopened. Older logs may also carry merged, closed or superseded, which the fold uses to tell a legacy merge from a legacy close.", "type": "string" },
-            "successor": { "description": "Legacy supersede pointer; never written now.", "$ref": "common.schema.json#/$defs/threadId" },
-            "superseded-by": { "description": "Legacy supersede pointer; never written now.", "$ref": "common.schema.json#/$defs/threadId" }
+            "from": { "$ref": "common.schema.json#/$defs/threadState" },
+            "to": { "$ref": "common.schema.json#/$defs/threadState" },
+            "reason": { "description": "Free text. The doctor gives its reason for shelving; the tool writes reopened.", "type": "string" }
           }
         } },
         "required": ["payload"]
@@ -271,21 +266,6 @@
       }
     },
     {
-      "if": { "properties": { "type": { "const": "child-closed" } } },
-      "then": {
-        "description": "On the PARENT. Legacy, read but never written: a child closed without merging. History only; the child's own log says how it ended.",
-        "properties": { "payload": {
-          "type": "object", "additionalProperties": false,
-          "required": ["child"],
-          "properties": {
-            "child": { "$ref": "common.schema.json#/$defs/threadId" },
-            "checkpoint": { "description": "The child's final checkpoint.", "type": "string", "pattern": "^c[0-9]{4}$" }
-          }
-        } },
-        "required": ["payload"]
-      }
-    },
-    {
       "if": { "properties": { "type": { "const": "child-dropped" } } },
       "then": {
         "description": "On the PARENT. A child was dropped (not worth pursuing). A normal ending: shown on the parent's view page and never a doctor finding.",
@@ -313,21 +293,6 @@
       }
     },
     {
-      "if": { "properties": { "type": { "const": "child-superseded" } } },
-      "then": {
-        "description": "Legacy parent event from the retired supersede command; never written now.",
-        "properties": { "payload": {
-          "type": "object", "additionalProperties": false,
-          "required": ["child", "successor"],
-          "properties": {
-            "child": { "$ref": "common.schema.json#/$defs/threadId" },
-            "successor": { "$ref": "common.schema.json#/$defs/threadId" }
-          }
-        } },
-        "required": ["payload"]
-      }
-    },
-    {
       "if": { "properties": { "type": { "const": "child-adopted" } } },
       "then": {
         "description": "On the NEW PARENT, paired with `reparented` on the moved thread. History, like `child-created`; the subthreads list comes from the child's thread.yml.",
@@ -346,7 +311,7 @@
     {
       "if": { "properties": { "type": { "const": "reparented" } } },
       "then": {
-        "description": "On the MOVED thread, as history: the tool writes the new parent to thread.yml at the same time, and nothing reads the parent from this event (older versions did). No folder moves, since subthreads live flat beside their parents.",
+        "description": "On the MOVED thread, as history: the tool writes the new parent to thread.yml at the same time, and nothing reads the parent from this event. No folder moves, since subthreads live flat beside their parents.",
         "properties": { "payload": {
           "type": "object", "additionalProperties": false,
           "required": ["from", "to"],

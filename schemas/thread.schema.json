@@ -42,22 +42,6 @@
         }
       ]
     },
-    "supersedes": {
-      "description": "Legacy pointer from the retired supersede command. Kept for old threads only; don't add it to new ones.",
-      "anyOf": [
-        {
-          "$ref": "common.schema.json#/$defs/threadId"
-        },
-        {
-          "type": "integer",
-          "minimum": 0,
-          "description": "an unquoted all-digit id, read as the id"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
     "flags": {
       "description": "Free-form: your own keys, each with a single value. Prefix keys with your tool's name (kiln.autonomous); not enforced. The view shows them on one line and counts changes to them.",
       "type": "object",

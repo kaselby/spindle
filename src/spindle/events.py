@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .limits import LIMITS
-from .store import ThreadError, current_state
+from .store import ThreadError
 
 
 def now() -> datetime:
@@ -80,8 +80,7 @@ PAYLOAD_KEYS: dict[str, tuple[str, ...]] = {
     "origin-revised": ("revision",),
     "linked": ("kind", "target"), "unlinked": ("kind", "target"),
     "merged-into": ("parent", "checkpoint"),
-    "child-closed": ("child",), "child-dropped": ("child",), "child-reopened": ("child",),
-    "child-superseded": ("child", "successor"),
+    "child-dropped": ("child",), "child-reopened": ("child",),
     "child-adopted": ("child", "title"),
     "reparented": ("from", "to"),
 }
@@ -166,7 +165,7 @@ def lifecycle_state(log: list[dict[str, Any]]) -> str:
     """Just the state: the last state-changed event, else active."""
     for event in reversed(log):
         if event["type"] == "state-changed":
-            return current_state(event["payload"]["to"], event["payload"].get("reason"))
+            return event["payload"]["to"]
     return "active"
 
 
@@ -181,7 +180,6 @@ def state(thread: Path, log: list[dict[str, Any]] | None = None) -> dict[str, An
     claims: dict[str, dict[str, Any]] = {}
     latest_checkpoint: dict[str, Any] | None = None
     last_checkpoint_index = -1
-    superseded_by: str | None = None
 
     for index, event in enumerate(log):
         session = event["by"]["session"]
@@ -196,8 +194,7 @@ def state(thread: Path, log: list[dict[str, Any]] | None = None) -> dict[str, An
         elif kind == "release":
             claims.pop(payload.get("session", session), None)
         elif kind == "state-changed":
-            lifecycle = current_state(payload["to"], payload.get("reason"))
-            superseded_by = payload.get("successor", payload.get("superseded-by", superseded_by))
+            lifecycle = payload["to"]
         elif kind == "checkpoint":
             latest_checkpoint = {
                 "id": payload["checkpoint"], "ts": event["ts"], "headline": payload["headline"]
@@ -221,8 +218,6 @@ def state(thread: Path, log: list[dict[str, Any]] | None = None) -> dict[str, An
         "links": links(log),
         "scratch-newer-than-checkpoint": scratch_newer(thread, latest_checkpoint),
     }
-    if superseded_by:
-        result["superseded-by"] = superseded_by
     if latest_checkpoint:
         result["last-checkpoint"] = latest_checkpoint
     return result

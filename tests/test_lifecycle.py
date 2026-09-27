@@ -570,32 +570,6 @@ def test_reopen_refuses_an_active_thread(root, run, solo):
     assert f"{solo} is already active; nothing to reopen" in result.err
 
 
-def test_close_is_gone_and_says_what_replaced_it(root, run, solo):
-    result = run("close", solo, "--force", "--root", root)
-    assert result.code == 2
-    assert "`thread complete <id>`" in result.err and "`thread drop <id>`" in result.err
-    assert _state(root, solo) == "active"
-
-
-def test_legacy_open_and_closed_states_fold_to_the_new_names(root, run, solo, family):
-    """Logs written before the rename: open reads as active, closed as
-    completed, and a closed whose reason was merged reads as merged."""
-    def legacy(path, to, reason):
-        with (path / "log.jsonl").open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps({
-                "id": "20260901T000000-aaaa", "ts": "2026-09-01T00:00:00Z",
-                "by": {"session": "old", "agent": "old"}, "type": "state-changed",
-                "payload": {"from": "open", "to": to, "reason": reason},
-            }) + "\n")
-        return events.state(path)["state"]
-
-    path = store.resolve_thread(root, solo)
-    assert legacy(path, "closed", "closed") == "completed"
-    assert legacy(path, "open", "reopened") == "active"
-    assert legacy(family["child_path"], "closed", "merged") == "merged"
-
-
-
 # ── pivots ───────────────────────────────────────────────────────────────────
 
 
@@ -729,15 +703,6 @@ def test_link_is_one_sided_and_renders_in_both_directions(root, run, make_thread
 
     assert run("unlink", first, "related", second, "--root", root).code == 0
     assert events.state(first_path)["links"] == []
-
-
-def test_supersede_is_retired_and_names_both_replacements(root, run, family):
-    result = run("supersede", family["child"], "A new title", "--root", root)
-    assert result.code == 2
-    assert f"`thread reanchor <id> --origin <file>`" in result.err
-    assert "`thread drop <old>`" in result.err
-    assert "`thread link <new> continues <old>`" in result.err
-    assert _state(root, family["child"]) == "active"
 
 
 # ── archive, view, doctor ────────────────────────────────────────────────────

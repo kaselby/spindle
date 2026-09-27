@@ -222,10 +222,6 @@ def parser() -> argparse.ArgumentParser:
     drop.add_argument("--force", action="store_true", help="move unfinished subthreads to this thread's parent")
     _common(drop, identity=True, data=True)
 
-    # Retired verb, kept off the help list: it only says what replaced it.
-    retired = commands.add_parser("close", add_help=False)
-    retired.add_argument("rest", nargs=argparse.REMAINDER)
-
     reopen = commands.add_parser("reopen", help="bring back a completed or dropped thread")
     reopen.add_argument("thread")
     _common(reopen, identity=True, data=True)
@@ -256,10 +252,6 @@ def parser() -> argparse.ArgumentParser:
     unlink.add_argument("kind", choices=LINK_KINDS)
     unlink.add_argument("target")
     _common(unlink, identity=True, data=True)
-
-    # Retired verb, kept off the help list: it only says what replaced it.
-    retired = commands.add_parser("supersede", add_help=False)
-    retired.add_argument("rest", nargs=argparse.REMAINDER)
 
     archive = commands.add_parser("archive", help="move finished threads (merged, completed, dropped) into threads/archived/")
     _common(archive, identity=True, data=True)
@@ -504,20 +496,6 @@ def _size(path: Path) -> int:
 
 def run(args: argparse.Namespace) -> None:
     command = args.command
-    if command == "close":
-        raise ThreadError(
-            "`thread close` is gone: a thread now ends as completed or dropped, so the archive shows "
-            "which. `thread complete <id>` if the work is done (a subthread merges instead: "
-            "`thread merge <id>`); `thread drop <id>` if it isn't worth pursuing "
-            f"({guide.doc('completion-and-merging.md')})."
-        )
-    if command == "supersede":
-        raise ThreadError(
-            "`thread supersede` is gone. If the work continues under a new origin, use "
-            "`thread reanchor <id> --origin <file>`. If the question itself was wrong, "
-            "`thread drop <old>` (or `thread complete <old>`), create a new thread, then connect it "
-            "with `thread link <new> continues <old>`."
-        )
     if command == "init":
         root, how = scopes.locate(args.root)
         notes = scopes.start_project_store(root) if how == "project" else (initialize(root) or [])

@@ -38,7 +38,6 @@ def identity(monkeypatch, tmp_path):
     """Deterministic identity; never inherit the developer's environment."""
     monkeypatch.setenv("THREAD_SESSION", "s1")
     monkeypatch.setenv("THREAD_AGENT", "a1")
-    monkeypatch.delenv("THREADS_ROOT", raising=False)
     # Never touch the real ~/.spindle: tests get their own home and store.
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("SPINDLE_ROOT", str(tmp_path / ".spindle"))

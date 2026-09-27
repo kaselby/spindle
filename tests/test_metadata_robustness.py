@@ -294,8 +294,8 @@ def test_a_forced_reparent_doesnt_show_as_a_thread_yml_change(root, run, tree3):
 def test_an_unquoted_all_digit_parent_reads_as_an_id(tmp_path):
     folder = tmp_path / "abc234-loose"
     folder.mkdir()
-    (folder / "thread.yml").write_text("title: Digits\nparent: 234567\nsupersedes: 345678\n", encoding="utf-8")
-    assert metadata.read(folder) == {"title": "Digits", "parent": "234567", "supersedes": "345678"}
+    (folder / "thread.yml").write_text("title: Digits\nparent: 234567\n", encoding="utf-8")
+    assert metadata.read(folder) == {"title": "Digits", "parent": "234567"}
     (folder / "thread.yml").write_text("title: Digits\nparent: true\n", encoding="utf-8")
     with pytest.raises(metadata.MetadataError):
         metadata.read(folder)
