@@ -564,6 +564,25 @@ def test_reopen_brings_back_a_completed_thread(root, run, solo):
     assert store.resolve_thread(root, solo).parent.name == "threads"
 
 
+def test_reopen_refuses_a_subthread_whose_parent_has_finished(root, run, body, family):
+    parent, child = family["parent"], family["child"]
+    assert run("merge", child, "--body", body(_merge_text(child)), "--root", root).code == 0
+    assert run("complete", parent, "--root", root).code == 0
+    commits = len(git(root, "log", "--oneline").splitlines())
+
+    result = run("reopen", child, "--root", root)
+    assert result.code == lifecycle.BAD_STATE
+    assert f"{child}'s parent, {parent}, is completed" in result.err
+    assert f"`thread reopen {parent}`" in result.err
+    assert _state(root, child) == "merged"  # nothing moved or written
+    assert len(git(root, "log", "--oneline").splitlines()) == commits
+
+    # The way through: parent first, then the child.
+    assert run("reopen", parent, "--root", root).code == 0
+    assert run("reopen", child, "--root", root).code == 0
+    assert _state(root, child) == "active"
+
+
 def test_reopen_refuses_an_active_thread(root, run, solo):
     result = run("reopen", solo, "--root", root)
     assert result.code == lifecycle.BAD_STATE

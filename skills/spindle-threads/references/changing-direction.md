@@ -64,7 +64,8 @@ move them to the dropped thread's parent.
 
 `thread reopen <id>` brings back a completed, dropped or merged thread when the
 work turns out not to be over. Write a checkpoint soon after, saying why it's
-open again.
+open again. A subthread whose parent has also finished can't come back alone:
+reopen the parent first.
 
 A thread that went inactive doesn't need reopening. Anything written to it makes
 it active again.

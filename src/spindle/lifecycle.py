@@ -474,8 +474,15 @@ def reopen(root: Path, thread: Path, by: dict[str, str]) -> dict[str, Any]:
     # Before any write: a parent that doesn't resolve refuses here, not after the move.
     parent = _parent_of(root, thread)
     if parent is not None:
-        _state(parent)  # child-reopened's append reads the parent's log; a bad one refuses now
-
+        # child-reopened's append reads the parent's log; a bad one refuses now.
+        parent_state = _state(parent)
+        if parent_state in ("completed", "dropped", "merged"):
+            # A finished thread can't have an active subthread (complete refuses the same).
+            raise ThreadError(
+                f"{identifier}'s parent, {thread_id(parent)}, is {parent_state}. Reopen "
+                f"{thread_id(parent)} first (`thread reopen {thread_id(parent)}`), then {identifier}.",
+                code=BAD_STATE,
+            )
 
     events.append(thread, "reopened", {}, by, reopen=False)
     events.append(thread, "state-changed", {
