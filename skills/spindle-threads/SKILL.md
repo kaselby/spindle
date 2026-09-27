@@ -106,7 +106,7 @@ For details on thread creation or promotion, read `references/thread-creation.md
 A thread is **active** while it's being worked on. After 14 days with no
 activity it becomes **inactive**, and any new activity makes it active again.
 
-Every thread ends in one of four ways, and each one moves the thread to the
+Every thread ends in one of three ways, and each one moves the thread to the
 archive:
 
 - **Merged:** a finished subthread, folded into its parent with
