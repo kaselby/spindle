@@ -26,7 +26,7 @@ cases = {
  "origin.schema.json": [
   ({"thread":"k7q2m9xa","created":TS,"by":ident}, True),
   ({"thread":"k7q2m9xa","created":TS,"by":ident,"previous":"origin-1.md"}, True),
-  # Metadata moved to thread.yml; an unmigrated origin fails.
+  # The title belongs in thread.yml, not here.
   ({"thread":"k7q2m9xa","title":"Thread schemas","created":TS,"by":ident}, False),
   ({"created":TS,"by":ident}, False)],
  "tasks.schema.json": [
@@ -36,9 +36,6 @@ cases = {
   ({"id":E1,"ts":TS,"by":ident,"type":"created","payload":{"title":"x"}}, True),
   ({"id":E1,"ts":TS,"by":ident,"type":"created","payload":{"title":"x","parent":"m3n4p5","from-task":"t9k2a","flags":{"kiln.autonomous":True},"namespace":"research"}}, True),
   ({"id":E1,"ts":TS,"by":ident,"type":"created","payload":{"title":"x","flags":{"k":[1]}}}, False),
-  ({"id":E1,"ts":TS,"by":ident,"type":"migrated","payload":{"metadata":{"title":"x","parent":"m3n4p5"}}}, True),
-  ({"id":E1,"ts":TS,"by":ident,"type":"migrated","payload":{"metadata":{"parent":"m3n4p5"}}}, False),
-  ({"id":E1,"ts":TS,"by":ident,"type":"migrated","payload":{}}, False),
   # Register kind: doc|artifact, matching the folder; the retired kinds stay readable.
   ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"pending","registration":{"path":"docs/a.md","kind":"doc","purpose":"p","read-when":"r"}}}, True),
   ({"id":E4,"ts":TS,"by":ident,"type":"register","payload":{"checkpoint":"pending","registration":{"path":"artifacts/a.csv","kind":"artifact","purpose":"p"}}}, True),
@@ -117,10 +114,7 @@ cases = {
   ({"title":"T","project":"spindle"}, False),
   ({"title":"T","parent":"Not An Id"}, False),
   ({"title":"T","flags":{"tags":["a","b"]}}, False),
-  ({"title":"T","flags":{"nested":{"a":1}}}, False),
-  # The older cache format is no longer this file's shape.
-  ({"id":"k7q2m9xa","slug":"thread-schemas","title":"T","state":"active","created":TS,"last-event":TS,
-    "tip":E3,"events-since-checkpoint":0,"children":[],"claims":[]}, False)],
+  ({"title":"T","flags":{"nested":{"a":1}}}, False)],
 }
 fails = 0
 for name, cs in cases.items():

@@ -37,8 +37,7 @@
         "child-superseded",
         "child-adopted",
         "reparented",
-        "reopened",
-        "migrated"
+        "reopened"
       ]
     },
     "payload": { "type": "object" }
@@ -364,18 +363,6 @@
       "then": {
         "description": "On the thread being reopened, immediately before its state-changed from a final state (completed, dropped, merged) to active.",
         "properties": { "payload": { "type": "object", "additionalProperties": false, "properties": {} } }
-      }
-    },
-    {
-      "if": { "properties": { "type": { "const": "migrated" } } },
-      "then": {
-        "description": "Written once per thread by the old `thread migrate` (since removed) when thread.yml became the metadata file. The payload is the metadata it wrote: the baseline for the view's 'thread.yml since the last checkpoint' line until the next checkpoint. Not work: it counts nowhere as activity and doesn't wake an inactive thread.",
-        "properties": { "payload": {
-          "type": "object", "additionalProperties": false,
-          "required": ["metadata"],
-          "properties": { "metadata": { "$ref": "thread.schema.json" } }
-        } },
-        "required": ["payload"]
       }
     }
   ]

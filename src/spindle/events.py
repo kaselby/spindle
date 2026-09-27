@@ -84,7 +84,6 @@ PAYLOAD_KEYS: dict[str, tuple[str, ...]] = {
     "child-superseded": ("child", "successor"),
     "child-adopted": ("child", "title"),
     "reparented": ("from", "to"),
-    "migrated": ("metadata",),
 }
 
 
@@ -279,13 +278,10 @@ def event_summary(event: dict[str, Any], *, full_note: bool = False) -> str:
     return ", ".join(pieces) or "-"
 
 
-# Lifecycle bookkeeping written by merge/complete/drop and by shelving, and
-# the one-time `migrated` baseline, are not "work since the checkpoint": they
-# are left out of the count everywhere.
 # What displays leave out of "events since the last checkpoint": the bookkeeping a
 # lifecycle verb writes after the checkpoint it closes over. Claims and releases
 # are shown and counted like anything else.
-BOOKKEEPING = frozenset({"merged-into", "state-changed", "migrated"})
+BOOKKEEPING = frozenset({"merged-into", "state-changed"})
 
 # The one rule the GATES use (release gate, clean gate, CAS): does this event
 # carry anything a checkpoint writer needs to have read? Presence (claim,
@@ -294,14 +290,14 @@ BOOKKEEPING = frozenset({"merged-into", "state-changed", "migrated"})
 # Links are display-only (they never gate), so they are shown and counted but
 # are not work a checkpoint writer must have read.
 NOT_WORK = frozenset({
-    "created", "claim", "release", "merged-into", "state-changed", "linked", "unlinked", "migrated",
+    "created", "claim", "release", "merged-into", "state-changed", "linked", "unlinked",
 })
 
 
 def is_activity(event: dict[str, Any]) -> bool:
-    """Somebody wrote this: not the doctor's upkeep, not the migration's baseline.
+    """Somebody wrote this: not the doctor's upkeep.
     Decides when a thread last saw activity (shelving, list order)."""
-    return event["by"]["session"] != "doctor" and event["type"] != "migrated"
+    return event["by"]["session"] != "doctor"
 
 
 def carries_work(event: dict[str, Any]) -> bool:

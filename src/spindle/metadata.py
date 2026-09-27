@@ -41,15 +41,6 @@ flags:                                        # optional: your own keys, scalar 
   kiln.autonomous: true                       #   prefix keys with your tool's name
 """
 
-# Keys only the old cache had. Their presence means the store predates this
-# model, which this version no longer converts (see OLD_FORMAT).
-_CACHE_KEYS = {"state", "tip", "events-since-checkpoint", "claims", "children", "last-event"}
-
-
-# Where to convert a store from before thread.yml held the metadata. The
-# converter was removed once the known stores were converted.
-OLD_FORMAT = "convert the store with `thread migrate` from an older Spindle (commit 5de08e0 has it)"
-
 
 class MetadataError(ThreadError):
     """thread.yml is missing or doesn't validate."""
@@ -101,12 +92,6 @@ def _scalar(value: Any) -> bool:
 def _validate(thread: Path, value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise _refuse(thread, [f"it must be a mapping of keys to values, not {type(value).__name__}"])
-    stale = sorted(_CACHE_KEYS & set(value))
-    if stale:
-        raise MetadataError(
-            f"{thread.name}/{FILE} is in the old format, a summary the tool rebuilt from the log "
-            f"(it has {', '.join(stale)}). This version can't read that; {OLD_FORMAT}."
-        )
     problems: list[str] = []
     result: dict[str, Any] = {}
     for key, item in value.items():

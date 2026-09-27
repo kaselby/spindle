@@ -1,6 +1,6 @@
 """thread.yml as the thread's metadata: validated on every read,
 edited by hand, diffed on the view page; the reading guide; register kinds;
-the old cache refused with a pointer; `list --flag`."""
+`list --flag`."""
 
 from __future__ import annotations
 
@@ -73,19 +73,6 @@ def test_a_file_with_nothing_committed_prints_the_schema(tmp_path):
     assert "It should look like this:" in text
     assert "kiln.autonomous: true" in text
     assert "checkout" not in text
-
-
-def test_the_old_cache_is_refused_with_a_pointer(root, make_thread, run):
-    identifier = make_thread("Old cache")
-    path = store.resolve_thread(root, identifier)
-    _write_yml(path, yaml.safe_dump({
-        "id": identifier, "title": "Old cache", "state": "active", "tip": "x", "children": [],
-    }))
-    result = run("view", identifier, "--root", root)
-    assert result.code != 0
-    assert "is in the old format" in result.err
-    assert "commit 5de08e0 has it" in result.err
-    assert "unknown key" not in result.err  # one clear message, not six unknown keys
 
 
 def test_list_skips_and_counts_a_thread_it_cannot_read(root, make_thread, run):
@@ -417,22 +404,6 @@ def test_tasks_sync_without_a_hash_emits_only_real_changes(root, make_thread, ru
     assert [(e["type"], e["payload"].get("hand-edit")) for e in added] == [("task-added", True)]
     assert run("view", identifier, "--root", root).code == 0
     assert len(events.read_events(path)) == count + 1
-
-
-# ── migrated threads ─────────────────────────────────────────────────────────
-
-
-def test_a_migrated_event_is_a_baseline_not_work(root, make_thread, run):
-    """Stores converted by the old `thread migrate` carry one `migrated` event per
-    thread. The command is gone; reading those events isn't."""
-    identifier = make_thread("Converted")
-    path = store.resolve_thread(root, identifier)
-    events.append(path, "migrated", {"metadata": {"title": "Converted"}}, {"session": "old", "agent": "old"})
-    view = run("view", identifier, "--root", root)
-    assert view.code == 0, view.err
-    assert "thread.yml since" not in view.out
-    _write_yml(path, "title: Converted, then renamed\n")
-    assert "thread.yml since" in run("view", identifier, "--root", root).out
 
 
 # ── list --flag ──────────────────────────────────────────────────────────────
