@@ -80,10 +80,6 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 160
-        },
-        "supersedes": {
-          "description": "Path of an earlier registration this one replaces. Reserved; the current tool doesn't write it.",
-          "$ref": "#/$defs/relPath"
         }
       },
       "allOf": [
