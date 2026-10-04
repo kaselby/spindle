@@ -28,18 +28,18 @@ k7q2m9-latency-regression/
   checkpoints/   one file per checkpoint; the latest says where the work stands
   log.jsonl      every event (claims, notes, tasks, registrations), written by the tool
   tasks.yml      the task list
-  docs/          guides for future sessions, registered with a note on when to read them
   artifacts/     things the work produced and should keep: reports, results, scripts
-  index.md       generated list of docs and artifacts
+  decisions/     one file per decision: what was chosen and why
+  index.md       generated list of artifacts
   scratch/       your working files; not tracked by git, not shown to anyone
   thread.yml     metadata: title, parent, flags.
-  reading-guide.md  optional: where to look and in what order, for a newcomer
+  orientation.md optional: where to look and what to read first, for a newcomer
 ```
 
 The `thread` CLI is used to interact with threads, and contains automated
 features for logging and event tracking. Thread files generally shouldn't be
-edited directly - use the tool instead. The exceptions are docs/artifacts and
-the reading guide (if applicable), and if you need to add flags to `thread.yml`.
+edited directly - use the tool instead. The exceptions are artifacts,
+`orientation.md`, and flags in `thread.yml`.
 
 Every action on a thread (a claim, a note, a task, a checkpoint) is recorded as
 an **event** with an id, in the thread's log.
@@ -78,7 +78,7 @@ As you work, make sure to keep the thread updated.
    on the view page.
 3. If your work creates artifacts which should be persisted in the thread (such
    as experiment harnesses, research reports, figures, presentations, etc.), use
-   `thread register --kind artifact` to register them as artifacts.
+   `thread register` to register them as artifacts.
 4. **Write a checkpoint when you reach a milestone.** Checkpoints are like
    commits. They act as a snapshot of the current state that can be read or
    replayed by future sessions. Read `references/checkpoints.md` for
@@ -103,30 +103,31 @@ If you are wrapping up your session but the thread is not yet complete, then:
    the tool will ask for a checkpoint; `--skip "<reason>"` releases without it,
    and the next session sees the reason.
 
-## Artifacts, docs & reading guides
+## Artifacts & orientation
 
-While working on the thread you may create artifacts such as scripts, research
-reports, diagrams or figures, presentations, experiment harnesses, etc.
-Throwaways can be left in `scratch/`, but anything that another session might
-need to use or consult should be registered as an artifact.
+While working you may create artifacts: scripts, research reports, figures,
+experiment harnesses, and so on. Throwaways go in `scratch/`. Anything another
+session might need to use or consult goes in `<thread>/artifacts/` and is
+registered with `thread register <id> artifacts/<file> --purpose "..."`. Add
+`--read-when "..."` if it matters when to open it.
 
-Docs act as curated guides and orientation aids, written to help future sessions
-understand what is present, where to find it, and how to use it. As the thread
-grows and more artifacts are registered, consider writing docs to register
-alongside them.
+If a new session would need more than the view page to get oriented, such as
+where the code lives, what to read first, or resources outside the thread,
+write `<thread>/orientation.md`. The view page shows it in full. Keep it to
+orientation and leave status and next steps to the checkpoint; it's capped
+at 1,500 characters.
 
-If you want to leave additional instructions about what should be read first or
-link to resources outside the thread, then you can write
-`<thread>/reading-guide.md`, which will be surfaced during orientation. Docs and
-reading guides shouldn't be used as handoff documents about one task; they
-should hold durable knowledge only.
+## Decisions
 
-Artifacts go in `<thread>/artifacts/` and docs go in `<thread>/docs/`. Both are
-registered with `thread register`. The reading guide lives at
-`<thread>/reading-guide.md`; register it with `--kind reading-guide` whenever
-you write or change it.
+Use `thread decide` to record choices later work depends on, with the reason,
+so a later session can judge whether they still hold.
 
-Read `references/artifacts-and-docs.md` for additional information.
+- **Working** is the default: the current best judgement, open to revision.
+- **Settled** (`--settled`) only if the user addressed it directly.
+- **To change one**, record the new decision with `--supersedes DNNN`; the old
+  one stays on file.
+
+`thread decisions <id>` lists them.
 
 ## Other sessions
 
@@ -158,8 +159,9 @@ established convention in place.
 | `thread claim` / `release <id>` | start / stop working on a thread |
 | `thread note <id> "text"` | record a finding (not shown on the view page) |
 | `thread task add\|close\|remove\|list <id> ...` | the task list |
-| `thread register <id> <path> --kind doc\|artifact --purpose "..."` | keep a doc (under docs/, needs `--read-when`) or artifact (under artifacts/), a file or a directory. Max 5 MB |
-| `thread register <id> reading-guide.md --kind reading-guide` | record that the reading guide was written or changed |
+| `thread register <id> artifacts/<path> --purpose "..." [--read-when "..."]` | keep an artifact, a file or a directory. Max 5 MB |
+| `thread decide <id> "title" <file> [--settled] [--supersedes DNNN]` | record a decision. No file prints the template |
+| `thread decisions [<id>] [DNNN] [--all]` | list live decisions, or show one |
 | `thread checkpoint <id> [body.md] [--at <event-id>]` | write a checkpoint. No body prints the template |
 | `thread create "title" --origin o.md [--parent <id>] [--ns <name>]` | new thread. No `--origin` prints the template |
 | `thread promote <id> <task-id> "title" --origin o.md` | task to subthread |

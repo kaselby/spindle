@@ -47,8 +47,8 @@ checkpoint that are still true and still matter, each ending with where it came
 from, like "(from c0003)". Drop one once it stops being true, and say so in
 Status. Delete the section if nothing carries over.
 
-Things that last belong elsewhere: how-tos and settled designs in docs, outputs
-in artifacts (`references/artifacts-and-docs.md`).
+Things that last belong elsewhere: choices in decisions, outputs in artifacts,
+and where to look in `orientation.md`.
 
 ## When someone else is writing too
 

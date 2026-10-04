@@ -15,8 +15,9 @@ true and who needs to see it:
   the view page. They're the raw record you write checkpoints from.
 - **The checkpoint:** anything the next session must see to pick up the work. If
   a note matters that much, it goes here too.
-- **A doc:** knowledge that stays true across checkpoints, like how to run
-  something or a settled design (`references/artifacts-and-docs.md`).
+- **A decision:** a choice that later work depends on, and why
+  (`thread decide`).
+- **An artifact:** something the work produced that a later session will use.
 
 When in doubt: if it will be wrong after the next checkpoint, it doesn't belong
 in a doc.
