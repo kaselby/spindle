@@ -70,9 +70,10 @@ design.md says why the split is drawn here.
 | `log.jsonl` | the tool | Append-only. Everything that happens to a thread is an event here. Hand edits to thread.yml aren't. |
 | `checkpoints/cNNNN.md` | you, plus the tool | Your outline, Status, and Inherited, then an `## Event log` section the tool adds. The frontmatter records thread.yml as it stood (`metadata:`). |
 | `tasks.yml` | you, and the tool | Edit it directly if you like: the tool diffs the board against the task events on every command and records what changed. |
-| `reading-guide.md` | you, optional | Where to look and in what order. See below. |
+| `orientation.md` | you, optional | Where to look and what to read first. See below. |
 | `index.md` | the tool | Generated from registrations. Never edit it. |
-| `docs/`, `artifacts/` | you | Only files registered with `thread register` appear in the index. |
+| `artifacts/` | you | Only files registered with `thread register` appear in the index. |
+| `decisions/DNNN-<slug>.md` | you, plus the tool | One per decision, written by `thread decide`. See below. |
 | `scratch/` | you | Not in git. Not shown anywhere. |
 
 ### thread.yml
@@ -122,44 +123,59 @@ checkpoint, the `created` event). Built-in fields are named and flags are
 counted. The line is not activity: it doesn't add to the event count and doesn't
 wake an inactive thread. The view lists the flags on one line under the title.
 
-### reading-guide.md
+### orientation.md
 
-Optional, hand-written, at the thread root: where to look and in what order, for
-someone new to the thread. It points at anything, inside or outside the thread:
-this thread's docs/ and artifacts/, repo paths, branches, PRs, URLs, another
-thread's `<id>:docs/<file>`. It never holds status, next steps or handoff notes;
-those go in the checkpoint.
+Optional, free-form, at the thread root: where to look and what to read first,
+for someone new to the thread. It can point at anything, inside or outside the
+thread: this thread's artifacts/, repo paths, branches, PRs, URLs, another
+thread's `<id>:artifacts/<file>`. Status and next steps go in the checkpoint.
 
-`thread view` shows it in full, in its own section before the docs list; with
-none, the view says nothing. After writing or changing it, register it with
-`thread register <id> reading-guide.md --kind reading-guide [--purpose "what changed"]`:
-that logs a `register` event (replay shows "reading guide updated") and reports
-its size against the cap. It is not in index.md, and doctor flags a guide that
-was never registered. At merge it is carried like a doc: promoted if the parent
-has none, otherwise left with the child. The cap is 1,500 characters, not
-counting HTML comments; the view still shows a guide over it, and doctor flags
-it loudly, since a guide that keeps growing is usually status creeping in.
-Doctor also checks that every local path in it exists: tokens starting with `/`,
-`~/`, `./`, `../`, `docs/`, `artifacts/`, or `<id>:docs/`, `<id>:artifacts/`.
-URLs and branch names aren't checked.
+`thread view` shows it in full under "# Orientation", before the artifacts;
+with none, the view says nothing. It is never registered, isn't in index.md,
+and merge never carries it to the parent. The cap is 1,500 characters, not
+counting HTML comments; the view still shows a file over it, and doctor flags
+it loudly, since one that keeps growing is usually status creeping in. Doctor
+also checks that every local path in it exists: tokens starting with `/`,
+`~/`, `./`, `../`, `artifacts/`, or `<id>:artifacts/`. URLs and branch names
+aren't checked.
 
 ### Registering
 
-`thread register <id> <path> --kind doc|artifact --purpose "..."` (docs also
-need `--read-when`). The kind must match the folder: `doc` for a path under
-docs/, `artifact` under artifacts/. The third kind, `reading-guide`, is
-described above. Registering a path again replaces its entry: the view and
-index.md show only the newest registration.
+`thread register <id> artifacts/<path> --purpose "..." [--read-when "..."]`
+takes a file or directory under artifacts/. The view and index.md show the
+read-when, if given, under the purpose. Registering a path again replaces its
+entry: the view and index.md show only the newest registration.
 
 At merge, whatever isn't promoted becomes a pointer on the parent
 (`<child>:<path>@<checkpoint>`). index.md lists pointers in full; the view page
 shows only a count of them, with a line pointing to index.md.
 
+### Decisions
+
+`thread decide <id> "title" <file> [--settled] [--supersedes DNNN]` writes
+`decisions/DNNN-<slug>.md` (D001, D002, … within the thread) and logs a
+`decided` event. The title is one line of at most 80 characters. The body has
+`## Decision` and `## Why`, both required, and optionally `## Alternatives`;
+any other section is refused. Without a file, the command prints the template.
+The frontmatter holds `id`, `title`, `status`, `created` and `by`, plus
+`supersedes` when set.
+
+The status is `working` unless `--settled` is given. Decision files aren't
+edited: `--supersedes DNNN` records a new decision and adds `superseded-by:` to
+the old file's frontmatter. A decision can be superseded only once; supersede
+its replacement instead. Which decisions are live is computed from the log.
+
+`thread decisions <id>` lists live decisions, one line each:
+`- D002 [working] Title (2026-10-04, replaces D001)`. `--all` adds superseded
+ones, `thread decisions <id> DNNN` prints one in full, and with no id it lists
+every active thread's. The view page shows only a count line. Decisions stay
+with their thread at merge.
+
 ## Events
 
 Every event has an id, a timestamp, who did it, a type, and a payload. Types
 include: `created`, `claim`, `release`, `note`, task changes, `register`,
-`checkpoint`, `origin-revised`, `linked`, `unlinked`,
+`checkpoint`, `decided`, `origin-revised`, `linked`, `unlinked`,
 `state-changed`, `merged-into`, `reopened`, `reparented`, and the parent-side
 `child-created`, `child-merged`, `child-dropped`, `child-reopened`, and
 `child-adopted`. The `child-*` events and `reparented` are history (the view's
@@ -230,12 +246,12 @@ days to inactive, and flags:
 
 - scratch files newer than the last checkpoint, and scratch files older than 30
   days;
-- files in docs/ or artifacts/ that were never registered;
+- files in artifacts/ that were never registered;
 - promoted tasks whose subthread is missing;
 - pointers to files that no longer exist, and links to threads that no longer
   exist;
 - a thread.yml that doesn't validate, and a `parent:` that names no thread;
-- a reading guide over the cap, and local paths in it that don't exist;
+- an orientation.md over the cap, and local paths in it that don't exist;
 - ended threads not yet in `threads/archived/`. `thread archive` moves them.
 
 ## Limits
@@ -256,5 +272,5 @@ All in `src/spindle/limits.py`:
 | inactive threads listed in the startup snapshot | 10 most recently active (every active thread is always listed) |
 | artifacts shown on the view page | 25 most recent |
 | largest registrable file | 5 MB |
-| reading guide | 1,500 characters (doctor flags it; the view still shows it) |
+| orientation.md | 1,500 characters (doctor flags it; the view still shows it) |
 | old scratch | 30 days |

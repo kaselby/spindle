@@ -59,8 +59,8 @@ becomes a new thread with its own origin.
 
 **Record freely, show carefully.** The log takes anything, cheaply, and is never
 shown on the orientation page. That's why recording freely is safe. What *is*
-shown is either written deliberately (origin, checkpoint, docs) or generated
-with a limit on its size.
+shown is either written deliberately (origin, checkpoint, orientation) or
+generated with a limit on its size.
 
 **The tool enforces what it can, because rules in prompts don't hold.** The
 earlier system asked for short status files. Agents wrote single lines of 900
@@ -93,8 +93,8 @@ files nobody registered surface in `view` and `doctor` for whoever arrives next.
 | **Log** | lost information, bloat | Everything is kept, and nothing in it is shown by default. |
 | **Notes** in the log | bloat | A place for findings that doesn't compete with the checkpoint. In the earlier system, notes on the orientation path had swallowed the real state. |
 | **thread.yml** | a second copy of the truth | The one place metadata lives, edited directly and checked on every read. State is computed, never stored beside it. |
-| **Reading guide** (max 1,500 characters) | slow orientation | Hand-written pointers and a reading order, including things outside the thread that registration can't point at. Capped and checked, because a guide that grows is status moving to the wrong place. |
-| **Docs with a read-when** | lost knowledge | Knowledge every future session needs, placed on the view page with when to read it. That turns "remember to read the notes" into a listed pointer. |
+| **Orientation** (max 1,500 characters) | slow orientation | Hand-written pointers and what to read first, including things outside the thread that registration can't point at. Capped and checked, because one that grows is status moving to the wrong place. |
+| **Decisions** | lost reasons | Each choice later work depends on, with the reason, so a later session can judge whether it still holds. Working by default and settled only when the user addressed it, because agents tend to record decisions nobody made. Superseded rather than edited, so the change of mind is on record. |
 | **Subthreads** | tasks carrying hidden reasoning | Work big enough to need its own reasoning gets its own origin and checkpoints, instead of stuffing that reasoning into a task's one line. |
 | **Merge writes the parent's checkpoint** | parents going stale | The moment a child finishes is the one moment someone is sure to be thinking about the parent. |
 | **Size guard on register** | disk bloat | The earlier system ended up with 7 GB of model weights in one thread's scratch, committed to git forever. |
@@ -102,9 +102,6 @@ files nobody registered surface in `view` and `doctor` for whoever arrives next.
 
 ## What was deliberately left out
 
-- **Decision records.** Agents tend to write down decisions nobody actually made
-  yet, and a recorded decision is hard to undo. Settled things go in Status. If
-  they need to last, they go in a doc.
 - **Locks and exclusive claims.** They bring stale-lock recovery, heartbeats,
   and takeover rules. In the earlier system, many sessions shared threads with
   claims alone and nothing was corrupted. The `--at` check covers the one real

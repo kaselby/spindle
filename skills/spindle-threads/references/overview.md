@@ -30,28 +30,30 @@ here. The events since the last checkpoint are the work nobody has written up
 yet.
 
 **What has it produced, and what should I read?** `artifacts/` holds outputs
-worth keeping, and `docs/` holds guides for future sessions. Each is registered
-with a one-line purpose, and docs also say when to read them. `index.md` is the
-generated list of both. `reading-guide.md`, if there is one, says where to look
-and in what order, including places outside the thread.
+worth keeping, each registered with a one-line purpose and, if it matters, when
+to read it. `index.md` is the generated list. `orientation.md`, if there is
+one, says where to look and what to read first, including places outside the
+thread.
+
+**Why was it done this way?** `decisions/` holds one file per choice that later
+work depends on, with the reason.
 
 **What is this thread?** `thread.yml` holds the title, the parent if it's a
 subthread, and any flags you add.
 
 `scratch/` is the working session's own space: not tracked, not shown.
 
-The tool writes the log, checkpoints, tasks and index; change those only with
-`thread` commands. You edit docs, artifacts, the reading guide and `thread.yml`
-directly, then register docs, artifacts and the reading guide so the change is
-logged.
+The tool writes the log, checkpoints, tasks, decisions and index; change those
+only with `thread` commands. You edit artifacts, `orientation.md` and
+`thread.yml` directly, and register artifacts so the view page lists them.
 
 ## Reading a thread
 
 `thread view <id>` puts the parts together in the order a newcomer needs them:
 the origin, one line per past checkpoint, the latest checkpoint in full, what
-has happened since, subthreads, who's working, open tasks, the reading guide,
-docs and artifacts, and links. It's the page to read before doing anything on a
-thread. `thread replay` shows the log itself.
+has happened since, subthreads, who's working, open tasks, a count of
+decisions, the orientation, artifacts, and links. It's the page to read before
+doing anything on a thread. `thread replay` shows the log itself.
 
 The session-start index is the level above: every thread in the store by id and
 title, with subthreads nested under their parents.
@@ -61,8 +63,8 @@ title, with subthreads nested under their parents.
 A **subthread** is a thread with a parent. It has everything a thread has, and
 takes on a stream of work that serves the parent's goal but needs its own
 history. When it's done it **merges**: the parent gets a checkpoint describing
-what the subthread brought, and can take over its open tasks and copy its docs
-and artifacts. Whatever isn't copied stays with the subthread, and the parent's
+what the subthread brought, and can take over its open tasks and copy its
+artifacts. Whatever isn't copied stays with the subthread, and the parent's
 index points to it.
 
 A **link** records that a thread is `related` to another, `blocked-by` it, or

@@ -29,8 +29,9 @@ else might pick it up. A task you'll finish in a few steps doesn't need one.
 - `log.jsonl`: a `created` event, and a claim for your session. You don't need
   to claim a thread you just created.
 - `tasks.yml`: an empty task list.
-- `index.md`: the (empty) list of docs and artifacts.
-- `checkpoints/`, `docs/`, `artifacts/`, `scratch/`: empty.
+- `index.md`: the (empty) list of artifacts.
+- `checkpoints/`, `artifacts/`, `scratch/`: empty. `decisions/` appears with
+  the first decision.
 
 There are no checkpoints yet, so the view page says so. Nothing is committed to
 git until the first checkpoint.

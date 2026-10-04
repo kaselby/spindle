@@ -10,17 +10,17 @@ true and who needs to see it:
 
 - **A task** (`thread task add`): something that needs doing and that you aren't
   doing now. Close it when it's done; remove it when it no longer needs doing.
-- **A note** (`thread note`): a finding worth keeping, like a measurement, a
-  dead end, or a decision and its reason. Notes stay in the log but aren't on
-  the view page. They're the raw record you write checkpoints from.
+- **A note** (`thread note`): a finding worth keeping, like a measurement or a
+  dead end. Notes stay in the log but aren't on the view page. They're the raw
+  record you write checkpoints from.
 - **The checkpoint:** anything the next session must see to pick up the work. If
   a note matters that much, it goes here too.
 - **A decision:** a choice that later work depends on, and why
   (`thread decide`).
 - **An artifact:** something the work produced that a later session will use.
 
-When in doubt: if it will be wrong after the next checkpoint, it doesn't belong
-in a doc.
+When in doubt: if it will be wrong after the next checkpoint, it belongs in the
+checkpoint, not an artifact.
 
 ## When to checkpoint
 

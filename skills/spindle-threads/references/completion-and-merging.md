@@ -37,12 +37,10 @@ Both threads need current checkpoints: the child's final one, and the parent's
 latest.
 
 1. **Decide what the parent takes.**
-   - **Docs and artifacts:** `--promote <path> ...` copies them into the parent,
-     where they're listed as the parent's own. Promote what the parent's work
-     will use. Everything else stays in the archived child; the parent's
-     `index.md` still lists it, and the view page counts it.
-   - **The reading guide:** promote `reading-guide.md` only if the parent has
-     none. Otherwise it stays with the child like the rest.
+   - **Artifacts:** `--promote <path> ...` copies them into the parent, where
+     they're listed as the parent's own. Promote what the parent's work will
+     use. Everything else stays in the archived child; the parent's `index.md`
+     still lists it, and the view page counts it.
    - **Open tasks:** `--tasks <id> ...` or `--all-tasks` copies them onto the
      parent's list. Take the ones that still need doing; the rest stay with the
      child.
