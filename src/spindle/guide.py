@@ -82,22 +82,6 @@ def origin_template(command: str) -> str:
     )
 
 
-def reanchor_origin_template(command: str) -> str:
-    """The origin template for a reanchor."""
-    return (
-        f"<!-- Reanchor: new origin. Fill it in, save it to a file, and run:\n"
-        f"       {command}\n"
-        f"     Write it as if the thread were being created today: self-contained, not in reference\n"
-        f"     to the old origin. Quote original words again if they're still the reason for the work.\n"
-        f"     Only the last section talks about the change.\n"
-        f"     Comment lines like this one are ignored. Guide: {doc('changing-direction.md')}. -->\n\n"
-        + ORIGIN_TEMPLATE.rstrip("\n")
-        + "\n\n## Previous origin\n"
-        "<!-- Required, at most 500 characters. A few sentences: what the earlier framing was, what\n"
-        "     changed, and why. The tool adds a pointer to the old origin's file. -->\n"
-    )
-
-
 def checkpoint_template(thread_id: str, recent: list[dict[str, Any]],
                         foreign: list[dict[str, Any]], latest_id: str,
                         previous: str | None) -> str:

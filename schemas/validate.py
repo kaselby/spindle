@@ -25,7 +25,6 @@ E1, E2, E3, E4, E5, E6, E7 = (f"20260911T1110{n:02d}-7kmq" for n in range(1, 8))
 cases = {
  "origin.schema.json": [
   ({"thread":"k7q2m9xa","created":TS,"by":ident}, True),
-  ({"thread":"k7q2m9xa","created":TS,"by":ident,"previous":"origin-1.md"}, True),
   # The title belongs in thread.yml, not here.
   ({"thread":"k7q2m9xa","title":"Thread schemas","created":TS,"by":ident}, False),
   ({"created":TS,"by":ident}, False)],
@@ -72,8 +71,6 @@ cases = {
   ({"id":E6,"ts":TS,"by":ident,"type":"reparented","payload":{"from":"k7q2m9xa","to":"m3n4p5"}}, True),
   ({"id":E6,"ts":TS,"by":ident,"type":"reparented","payload":{"from":"k7q2m9xa"}}, False),
   ({"id":E6,"ts":TS,"by":ident,"type":"reopened","payload":{}}, True),
-  ({"id":E6,"ts":TS,"by":ident,"type":"origin-replaced","payload":{"previous":"origin-1.md","after-checkpoint":"c0007","title":"New anchor"}}, True),
-  ({"id":E6,"ts":TS,"by":ident,"type":"origin-replaced","payload":{"previous":"origin.md","after-checkpoint":"c0007"}}, False),
   ({"id":E6,"ts":TS,"by":ident,"type":"linked","payload":{"kind":"blocked-by","target":"m3n4p5"}}, True),
   ({"id":E6,"ts":TS,"by":ident,"type":"unlinked","payload":{"kind":"follows","target":"m3n4p5"}}, False),
   ({"id":E7,"ts":TS,"by":ident,"type":"state-changed","payload":{"from":"open","to":"superseded","reason":"superseded","successor":"m3n4p5"}}, False),

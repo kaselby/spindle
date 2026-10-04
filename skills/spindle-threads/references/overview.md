@@ -16,7 +16,7 @@ A thread is a folder, and each part answers one question a newcomer has.
 and constraints if there are any. It's written when the thread is created and
 never edited in place, because everything else is measured against it. If the
 understanding shifts, `thread revise` appends a dated revision; if the work
-becomes something else, `thread reanchor` replaces it and keeps the old one.
+becomes something else, it gets a new thread.
 
 **Where does it stand?** `checkpoints/` holds one file per checkpoint, each a
 snapshot a session wrote: a headline, an outline, and a status measured against
@@ -104,7 +104,7 @@ A thread's id is the six characters before the first dash (`k7q2m9`), and
 commands take the id. **Namespaces** are optional folders that group threads; a
 subthread always lives in its parent's.
 
-Checkpoints, merges, completions, drops, revisions and reanchors each commit to
+Checkpoints, merges, completions, drops and revisions each commit to
 git. Everything else is on disk at once and goes into the next commit.
 
 Every command's flags: `thread <command> --help`.

@@ -53,7 +53,7 @@ back to user@host, which can't tell two sessions apart, so set it.
 
 | What | Where | Who writes it |
 |---|---|---|
-| Metadata: title, parent, `flags:` | `thread.yml` | people and agents, by hand; the tool on create, reanchor (title) and reparent (parent) |
+| Metadata: title, parent, `flags:` | `thread.yml` | people and agents, by hand; the tool on create and reparent (parent) |
 | What happened: claims, notes, checkpoints, tasks, registrations, links, merges | `log.jsonl` | the tool, append-only |
 | Current state: state, claims, counts, last checkpoint, subthreads, links | nowhere; computed on read | never stored |
 | Why the work exists | `origin.md` | narrative only; its frontmatter says only whose it is and when it was written |
@@ -65,7 +65,7 @@ design.md says why the split is drawn here.
 
 | File | Written by | Notes |
 |---|---|---|
-| `origin.md` | you, at creation | Never rewritten. Revisions are appended under `## Revisions`. `reanchor` replaces it whole, moves the old one to `origin-N.md`, and writes a checkpoint in the same commit. |
+| `origin.md` | you, at creation | Never rewritten. Revisions are appended under `## Revisions`. |
 | `thread.yml` | you, and the tool | The metadata. Edit it directly; see below. |
 | `log.jsonl` | the tool | Append-only. Everything that happens to a thread is an event here. Hand edits to thread.yml aren't. |
 | `checkpoints/cNNNN.md` | you, plus the tool | Your outline, Status, and Inherited, then an `## Event log` section the tool adds. The frontmatter records thread.yml as it stood (`metadata:`). |
@@ -113,15 +113,14 @@ parent-cycle), and merge, drop, complete and reopen refuse until it's fixed.
 `thread list` and the startup snapshot show a cross-namespace thread at the top
 of its own namespace, marked "subthread of X", which is display only.
 
-The tool changes one line when it writes (the title on reanchor, the parent when
-merge or drop `--force` moves a subthread up), so comments and flag order
-survive. Hand edits aren't events. The view page shows them as a line under the
-banner, "thread.yml since the last checkpoint: title, parent changed; 2 flags
-changed", diffed against the `metadata:` block of the latest checkpoint (before
-the first checkpoint, the `created` event). Built-in fields are named and flags
-are counted. The line is not activity: it doesn't add to the event count and
-doesn't wake an inactive thread. The view lists the flags on one line under the
-title.
+The tool changes one line when it writes (the parent when merge or drop
+`--force` moves a subthread up), so comments and flag order survive. Hand edits
+aren't events. The view page shows them as a line under the banner, "thread.yml
+since the last checkpoint: title, parent changed; 2 flags changed", diffed
+against the `metadata:` block of the latest checkpoint (before the first
+checkpoint, the `created` event). Built-in fields are named and flags are
+counted. The line is not activity: it doesn't add to the event count and doesn't
+wake an inactive thread. The view lists the flags on one line under the title.
 
 ### reading-guide.md
 
@@ -160,7 +159,7 @@ shows only a count of them, with a line pointing to index.md.
 
 Every event has an id, a timestamp, who did it, a type, and a payload. Types
 include: `created`, `claim`, `release`, `note`, task changes, `register`,
-`checkpoint`, `origin-revised`, `origin-replaced`, `linked`, `unlinked`,
+`checkpoint`, `origin-revised`, `linked`, `unlinked`,
 `state-changed`, `merged-into`, `reopened`, `reparented`, and the parent-side
 `child-created`, `child-merged`, `child-dropped`, `child-reopened`, and
 `child-adopted`. The `child-*` events and `reparented` are history (the view's
@@ -175,7 +174,7 @@ or reopen) don't count as work.
 
 A store is one repository for all its threads, so a merge that touches two
 threads is one commit. Commits happen at checkpoints and at lifecycle commands
-(merge, complete, drop, reopen, revise, reanchor, archive), not on every event.
+(merge, complete, drop, reopen, revise, archive), not on every event.
 So each commit corresponds to a meaningful moment. A commit contains only the
 threads its command touched; events on other threads stay uncommitted until
 their own next commit. Work across machines syncs with ordinary push and pull.
@@ -210,7 +209,7 @@ conflict with itself.
   completed, dropped or merged thread back to active. completion-and-merging.md
   and changing-direction.md cover when to use which.
 
-`complete`, `drop`, `merge` (on both sides), `revise`, and `reanchor` require a
+`complete`, `drop`, `merge` (on both sides), and `revise` require a
 thread with no events since its last checkpoint.
 
 ## Maintenance

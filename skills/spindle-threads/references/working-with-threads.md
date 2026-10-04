@@ -63,8 +63,8 @@ not edit this file directly; it is immutable. Instead, use the thread tools:
 
 - **Your understanding shifted** but it's the same work: `thread revise` appends
   a dated revision to the origin.
-- **It has become different work:** `thread reanchor` replaces the origin and
-  keeps the history. Use this sparingly; it risks drift.
+- **It has become different work:** finish this thread and start a new one
+  that `continues` it.
 - **It's no longer worth doing:** `thread drop` ends it.
 
 See `references/changing-direction.md` for each. If the work is just on hold, do

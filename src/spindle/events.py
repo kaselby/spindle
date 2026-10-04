@@ -76,7 +76,6 @@ PAYLOAD_KEYS: dict[str, tuple[str, ...]] = {
     "child-merged": ("child", "checkpoint"),
     "register": ("registration", "checkpoint"),
     "state-changed": ("from", "to"),
-    "origin-replaced": ("previous", "after-checkpoint"),
     "origin-revised": ("revision",),
     "linked": ("kind", "target"), "unlinked": ("kind", "target"),
     "merged-into": ("parent", "checkpoint"),

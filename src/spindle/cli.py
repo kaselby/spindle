@@ -231,12 +231,6 @@ def parser() -> argparse.ArgumentParser:
     revise.add_argument("file", type=Path, help="markdown: what changed in the understanding, and why")
     _common(revise, identity=True, data=True)
 
-    reanchor = commands.add_parser("reanchor", help="replace the origin while keeping the thread and its work")
-    reanchor.add_argument("thread")
-    reanchor.add_argument("--origin", type=Path, help=ORIGIN_HELP)
-    reanchor.add_argument("--title", help="replace the title (the folder and slug stay unchanged)")
-    reanchor.add_argument("--body", type=Path, help="the checkpoint reanchoring writes, measured against the new origin (no body: print the template)")
-    _common(reanchor, identity=True, data=True)
 
     link = commands.add_parser(
         "link",
@@ -270,10 +264,7 @@ def parser() -> argparse.ArgumentParser:
     return result
 
 
-PREVIOUS_ORIGIN = "Previous origin"
-
-
-def _validate_origin(body: str, *, reanchoring: bool = False) -> None:
+def _validate_origin(body: str) -> None:
     body = guide.strip_comments(body)
     lines = body.splitlines()
     found: dict[str, str] = {}
@@ -290,27 +281,6 @@ def _validate_origin(body: str, *, reanchoring: bool = False) -> None:
                 f"the origin needs a non-empty `## {name}` section. `thread create --template` prints "
                 f"the template ({guide.doc('creating-a-thread.md')})."
             )
-    # A reanchored origin is written as if the thread were
-    # created today, plus one short section on the change, pointing back.
-    if reanchoring:
-        text = found.get(PREVIOUS_ORIGIN, "")
-        if not text:
-            raise ThreadError(
-                f"a reanchored origin needs a short `## {PREVIOUS_ORIGIN}` section at the end: what the "
-                f"earlier framing was, what changed, and why. The tool adds the pointer to the old file. "
-                f"Write the rest as if the thread were created today ({guide.doc('changing-direction.md')})."
-            )
-        limit = LIMITS["previous_origin_chars"]
-        if len(text) > limit:
-            raise ThreadError(
-                f"`## {PREVIOUS_ORIGIN}` is {len(text)} characters; the limit is {limit}. Keep it to a few "
-                f"sentences: the old origin itself stays readable in its own file."
-            )
-    elif PREVIOUS_ORIGIN in found:
-        raise ThreadError(
-            f"`## {PREVIOUS_ORIGIN}` belongs only in a reanchored origin (`thread reanchor`). "
-            f"Remove it from a new thread's origin."
-        )
 
 
 def _flag_filters(values: list[str]) -> list[tuple[str, str | None]]:
@@ -631,31 +601,6 @@ def run(args: argparse.Namespace) -> None:
         value = lifecycle.revise(root, thread, args.file, by)
         _emit(value if args.json else (
             f"Revised {value['thread']}: revision {value['revision']}\n"
-        ), as_json=args.json)
-    elif command == "reanchor":
-        if not args.origin:
-            title_flag = f' --title "{args.title}"' if args.title else ""
-            raise NeedsInput(guide.reanchor_origin_template(
-                f"thread reanchor {identifier}{title_flag} --origin <file>"
-            ))
-        if not args.body:
-            # Reanchoring is a checkpoint: it opens the thread
-            # under its new origin, so it needs a body written against that origin.
-            title_flag = f' --title "{args.title}"' if args.title else ""
-            template = checkpoint.template(thread, by).replace(
-                f"thread checkpoint {identifier} <file>",
-                f"thread reanchor {identifier}{title_flag} --origin {args.origin} --body <file>\n"
-                "     Reanchoring writes this checkpoint. The origin's Previous origin section says why the\n"
-                "     framing changed; this checkpoint says where the work stands against the NEW origin.",
-                1,
-            )
-            raise NeedsInput(template)
-        value = lifecycle.reanchor(
-            root, thread, args.origin, by, title=args.title, body_text=args.body.read_text(encoding="utf-8"),
-        )
-        _emit(value if args.json else (
-            f"Reanchored {value['thread']}: {value['checkpoint']} opens the new origin "
-            f"(previous origin is {value['previous']})\n"
         ), as_json=args.json)
     elif command == "link":
         target = resolve_thread(root, args.target)

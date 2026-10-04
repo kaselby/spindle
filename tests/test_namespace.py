@@ -180,20 +180,6 @@ def test_layout_names_cannot_confuse_anchoring(root, run, make_thread):
         assert store.is_active(path)
 
 
-def test_reanchor_keeps_the_namespace(root, make_thread, run, origin, body):
-    from spindle import metadata, store
-
-    identifier = make_thread("Old", "--ns", "research")
-    assert run("checkpoint", identifier, body(), "--root", root).code == 0
-    new_origin = origin.parent / "reanchor-origin.md"
-    new_origin.write_text("## Context & Motivation\nThe work, framed as if new.\n\n## Previous origin\nIt used to be narrower.\n", encoding="utf-8")
-    assert run(
-        "reanchor", identifier, "--origin", new_origin, "--title", "Old, reanchored",
-        "--body", body(), "--root", root,
-    ).code == 0
-    path = store.resolve_thread(root, identifier)
-    assert store.namespace_of(path) == "research"
-    assert metadata.read(path)["title"] == "Old, reanchored"
 
 
 def test_list_nests_subthreads_under_their_parent(root, make_thread, run):

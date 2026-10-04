@@ -27,7 +27,6 @@
         "register",
         "state-changed",
         "origin-revised",
-        "origin-replaced",
         "linked",
         "unlinked",
         "merged-into",
@@ -200,22 +199,6 @@
             "from": { "$ref": "common.schema.json#/$defs/threadState" },
             "to": { "$ref": "common.schema.json#/$defs/threadState" },
             "reason": { "description": "Free text. The doctor gives its reason for shelving; the tool writes reopened.", "type": "string" }
-          }
-        } },
-        "required": ["payload"]
-      }
-    },
-    {
-      "if": { "properties": { "type": { "const": "origin-replaced" } } },
-      "then": {
-        "description": "The origin was replaced in place after a clean checkpoint; the prior file remains beside it.",
-        "properties": { "payload": {
-          "type": "object", "additionalProperties": false,
-          "required": ["previous", "after-checkpoint"],
-          "properties": {
-            "previous": { "type": "string", "pattern": "^origin-[1-9][0-9]*\\.md$" },
-            "after-checkpoint": { "type": "string", "pattern": "^c[0-9]{4}$" },
-            "title": { "type": "string", "minLength": 1, "maxLength": 80 }
           }
         } },
         "required": ["payload"]

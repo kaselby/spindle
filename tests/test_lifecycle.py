@@ -1,4 +1,4 @@
-"""Lifecycle: merge, complete, drop, reopen, revise, reanchor, archive, view --deep."""
+"""Lifecycle: merge, complete, drop, reopen, revise, archive, view --deep."""
 
 from __future__ import annotations
 
@@ -640,66 +640,8 @@ def _write(directory, name, text):
 
 
 
-def test_reanchor_replaces_the_origin_in_place_and_marks_the_history(root, run, origin, body, tmp_path, family):
-    path = family["child_path"]
-    before = (path / "origin.md").read_text(encoding="utf-8")
-    commits = len(git(root, "log", "--oneline").splitlines())
-
-    new_origin = _write(tmp_path, "reanchor-origin.md", "## Context & Motivation\nThe work, framed as if new.\n\n## Previous origin\nIt used to be narrower.\n")
-    result = run(
-        "reanchor", family["child"], "--origin", new_origin, "--title", "A wider child",
-        "--body", body(CHILD_BODY), "--root", root, "--json",
-    )
-    assert result.code == 0, result.err
-    value = json.loads(result.out)
-    assert value["previous"] == "origin-1.md"
-    assert value["after-checkpoint"] == "c0001"
-    assert (path / "origin-1.md").read_text(encoding="utf-8") == before
-
-    front, _ = store.parse_frontmatter((path / "origin.md").read_text(encoding="utf-8"))
-    assert front["thread"] == family["child"]
-    assert front["previous"] == "origin-1.md"
-    # The origin is narrative; the title and parent live in thread.yml.
-    assert "title" not in front and "parent" not in front
-    assert metadata.read(path)["title"] == "A wider child"
-    assert metadata.read(path)["parent"] == family["parent"]
-    assert value["checkpoint"] == "c0002"
-    assert "## Previous origin" in (path / "origin.md").read_text(encoding="utf-8")
-    replaced = _log(path)[-2]
-    assert replaced["type"] == "origin-replaced"
-    assert _log(path)[-1]["type"] == "checkpoint"
-    assert replaced["payload"] == {
-        "previous": "origin-1.md", "after-checkpoint": "c0001", "title": "A wider child",
-    }
-    assert len(git(root, "log", "--oneline").splitlines()) == commits + 1
-
-    view = run("view", family["child"], "--root", root).out
-    assert "*Replaced " in view and "Earlier origins: origin-1.md.*" in view
-    assert "- — origin replaced after c0001 (previous: origin-1.md) —" in view
 
 
-def test_reanchor_accepts_any_heading_the_origin_check_accepts(root, run, body, tmp_path, family):
-    # The origin check reads a heading as the text after "## ", trimmed, so the
-    # step that moves Previous origin to the end has to find it the same way.
-    path = family["child_path"]
-    new_origin = _write(
-        tmp_path, "reanchor-origin.md",
-        "##  Previous origin  \nIt used to be narrower.\n\n## Context & Motivation\nThe work, framed as if new.\n",
-    )
-    result = run(
-        "reanchor", family["child"], "--origin", new_origin, "--title", "A wider child",
-        "--body", body(CHILD_BODY), "--root", root, "--json",
-    )
-    assert result.code == 0, result.err
-    text = (path / "origin.md").read_text(encoding="utf-8")
-    assert text.count("Previous origin") == 1
-    assert text.index("## Context & Motivation") < text.index("## Previous origin")
-    assert "It used to be narrower." in text.split("## Previous origin", 1)[1]
-
-
-    revision = _write(tmp_path, "new-revision.md", "The new origin narrowed again.\n")
-    assert run("revise", family["child"], revision, "--root", root).code == 0
-    assert _log(path)[-1]["payload"] == {"revision": 1}
 
 
 def test_link_is_one_sided_and_renders_in_both_directions(root, run, make_thread):

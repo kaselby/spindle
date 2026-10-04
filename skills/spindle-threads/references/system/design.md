@@ -54,9 +54,8 @@ against the copy each checkpoint keeps.
 place. Checkpoints are written against the origin, not against the previous
 checkpoint, so a distortion in one checkpoint isn't carried into the next. If
 understanding changes, a revision is appended with the original still visible,
-so the change itself is on record. If the work becomes something else, reanchor
-replaces the origin, but only after a checkpoint closes out the old one, and the
-old origin is kept beside it as origin-N.md.
+so the change itself is on record. If the work becomes something else, it
+becomes a new thread with its own origin.
 
 **Record freely, show carefully.** The log takes anything, cheaply, and is never
 shown on the orientation page. That's why recording freely is safe. What *is*
@@ -87,7 +86,7 @@ files nobody registered surface in `view` and `doctor` for whoever arrives next.
 
 | Part | Prevents | How |
 |---|---|---|
-| **Origin** | drift | Written once, in the asker's words where possible, and never edited in place (revise appends; reanchor replaces and keeps the old one). It's the fixed point everything else is measured against. |
+| **Origin** | drift | Written once, in the asker's words where possible, and never edited in place (revise appends; different work gets a new thread). It's the fixed point everything else is measured against. |
 | **Checkpoint** | drift, bloat | One deliberate statement of where things stand, with limited size, written against the origin. The latest one is the current state; all of them together show how the work evolved. |
 | **Headline** | bloat | A one-line limit lets the view page show every checkpoint in the history without the history taking over the page. |
 | **Inherited** (max 3) | silent loss, and pile-up | Keeps a critical warning from being dropped between checkpoints, capped because the earlier equivalent grew forever. |

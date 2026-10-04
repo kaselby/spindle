@@ -164,7 +164,7 @@ established convention in place.
 | `thread create "title" --origin o.md [--parent <id>] [--ns <name>]` | new thread. No `--origin` prints the template |
 | `thread promote <id> <task-id> "title" --origin o.md` | task to subthread |
 | `thread merge` / `complete` | finish a thread: `references/completion-and-merging.md` |
-| `thread revise` / `reanchor` / `drop` / `reopen` | change direction: `references/changing-direction.md` |
+| `thread revise` / `drop` / `reopen` | change direction: `references/changing-direction.md` |
 | `thread link` / `unlink <id> <kind> <target>` | `related`, `blocked-by`, or `continues`. Display only |
 | `thread replay <id>` | read the log. `--checkpoint cNNNN` or `--checkpoints` shows past checkpoints in full |
 | `thread doctor [<id>]` | check for problems; each finding says what to do |

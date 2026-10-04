@@ -194,12 +194,6 @@ def _arc(root: Path, log: list[dict[str, Any]], children: list[dict[str, Any]],
         if event["type"] == "checkpoint":
             suffix = " ← current" if event["id"] == current else ""
             rows.append((event["ts"], f"- {event['payload']['checkpoint']}: {event['payload']['headline']}{suffix}"))
-        elif event["type"] == "origin-replaced":
-            payload = event["payload"]
-            rows.append((event["ts"], (
-                f"- — origin replaced after {payload['after-checkpoint']} "
-                f"(previous: {payload['previous']}) —"
-            )))
     if deep:
         for child in children:
             try:
@@ -326,15 +320,6 @@ def view(root: Path, thread: Path, *, deep: bool = False) -> str:
     identifier = cache["id"]
     _origin_metadata, origin_body = parse_frontmatter((thread / "origin.md").read_text(encoding="utf-8"))
     origin_text = guide.strip_comments(origin_body).strip()
-    replacements = [event for event in log if event["type"] == "origin-replaced"]
-    origin_history = []
-    if replacements:
-        latest = replacements[-1]
-        earlier = ", ".join(event["payload"]["previous"] for event in replacements)
-        origin_history = [
-            f"*Replaced {latest['ts'][:10]}, after {latest['payload']['after-checkpoint']}. "
-            f"Earlier origins: {earlier}.*"
-        ]
 
     # Presence.
     claims = cache.get("claims", [])
@@ -459,7 +444,7 @@ def view(root: Path, thread: Path, *, deep: bool = False) -> str:
         reading = []
     return "\n".join([
         *title_block, *banner, "",
-        "# Origin: why this exists", *origin_history, origin_text, "",
+        "# Origin: why this exists", origin_text, "",
         "# How it got here",
         *([f"*One line per checkpoint, oldest first; the last is the current one. "
             f"`thread replay {identifier} --checkpoint cNNNN` shows any of them in full.*"] if arc else []),

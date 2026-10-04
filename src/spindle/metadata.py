@@ -4,9 +4,9 @@ What a thread is (title, parent, flags) lives here and nowhere else.
 What happened lives in log.jsonl; what state the thread is in is computed from
 the log on read (events.state) and never stored. origin.md is narrative only.
 
-People and agents edit thread.yml directly. The tool writes it on create, on
-reanchor (title) and on reparent (parent), touching only the line it changes so
-hand-written comments and flag order survive.
+People and agents edit thread.yml directly. The tool writes it on create and on
+reparent (parent), touching only the line it changes so hand-written comments
+and flag order survive.
 
 The file is validated on every read. A bad file is an error for commands on
 that one thread; store-wide readers (list, the startup snapshot, subthread and

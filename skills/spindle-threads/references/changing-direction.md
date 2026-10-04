@@ -22,28 +22,13 @@ revisions.
 Keep a revision about the goal. New findings and changes of plan belong in a
 checkpoint.
 
-## Reanchor: it has become different work
+## New work: it has become something else
 
-Use `thread reanchor` when the question you're answering now isn't the one the
-thread started with, but the history, tasks and artifacts still belong here. If
-the new work would make as much sense as a fresh thread, create one and link it
-with `continues` instead. Reanchor sparingly: a thread that keeps changing what
-it's for becomes hard to read.
-
-1. **Close out the old origin.** Write a checkpoint that says where the work
-   stood against the old goal. Reanchor refuses until the latest checkpoint is
-   current.
-2. **Write the new origin:** `thread reanchor <id>` prints the template. Write
-   it as if the thread were being created today, so it stands on its own, and
-   end with a short **Previous origin** section (at most 500 characters): what
-   the earlier framing was, what changed, and why.
-3. **Write the checkpoint that opens it:** where things stand, measured against
-   the new origin. `thread reanchor <id> --origin <file>` prints its template.
-4. **Reanchor:** `thread reanchor <id> --origin <file> --body <checkpoint>`,
-   with `--title "<new title>"` if the title no longer fits.
-
-The old origin is kept as `origin-1.md` (then `origin-2.md`, and so on), and the
-new one points back to it.
+If the question you're answering now isn't the one the thread started with,
+start a new thread for it. Write a final checkpoint on the old one saying where
+it stood, then complete or drop it. Create the new thread with an origin that
+stands on its own and names the old thread's id, and link the two with
+`thread link <new> continues <old>`. Move over any open tasks that still apply.
 
 ## Drop: no longer worth doing
 

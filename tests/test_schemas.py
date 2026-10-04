@@ -187,12 +187,6 @@ def exercised_phase_two(root, make_thread, run, origin, body, tmp_path):
     revision.write_text("The scope narrowed.\n", encoding="utf-8")
     assert run("revise", grandchild, revision, "--root", root).code == 0
     checkpoint(grandchild, "After the revision.\n\n## Status\nStill green.\n")
-    new_origin = tmp_path / "reanchor-origin.md"
-    new_origin.write_text("## Context & Motivation\nThe work, framed as if new.\n\n## Previous origin\nIt used to be narrower.\n", encoding="utf-8")
-    reanchor_body = tmp_path / "reanchor-body.md"
-    reanchor_body.write_text("Reanchored.\n\n## Status\nGreen under the new origin.\n", encoding="utf-8")
-    assert run("reanchor", grandchild, "--title", "Phase two grandchild, take two",
-               "--origin", new_origin, "--body", reanchor_body, "--root", root).code == 0
     assert run("archive", "--root", root).code == 0
     assert run("doctor", "--root", root).code == 0
     return root
@@ -219,7 +213,7 @@ def test_phase_two_writes_only_schema_valid_files(validators, exercised_phase_tw
             check(validators, "checkpoint.schema.json", front, f"{label} {checkpoint.name}")
     assert seen >= {
         "merged-into", "child-merged", "child-dropped", "child-reopened",
-        "child-adopted", "reparented", "reopened", "origin-revised", "origin-replaced", "state-changed",
+        "child-adopted", "reparented", "reopened", "origin-revised", "state-changed",
     }
 
 

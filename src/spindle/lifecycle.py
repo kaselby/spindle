@@ -1,4 +1,4 @@
-"""Lifecycle verbs: merge, complete, drop, reopen, revise, reanchor, archive.
+"""Lifecycle verbs: merge, complete, drop, reopen, revise, archive.
 
 Every lifecycle verb here is one git commit. Merge is the only
 one that writes files before events, so it is the only one with a rollback,
@@ -502,82 +502,6 @@ def reopen(root: Path, thread: Path, by: dict[str, str]) -> dict[str, Any]:
 
 
 
-def _previous_origin_last(body: str, pointer: str) -> str:
-    """Move `## Previous origin` to the end of the origin and add the tool's
-    pointer line, so the standalone sections always come first."""
-    lines = body.rstrip("\n").splitlines()
-    # Match headings the way the origin check does (cli.py), or a heading it
-    # accepted, such as "##  Previous origin", isn't found here.
-    start = next(i for i, line in enumerate(lines)
-                 if line.startswith("## ") and line[3:].strip() == "Previous origin")
-    end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
-    section = [line for line in lines[start + 1 : end]]
-    rest = (lines[:start] + lines[end:])
-    text = "\n".join(section).strip()
-    return "\n".join(rest).rstrip() + f"\n\n## Previous origin\n\n{text}\n\n{pointer}\n"
-
-
-def reanchor(
-    root: Path, thread: Path, source: Path, by: dict[str, str], *, title: str | None = None,
-    body_text: str,
-) -> dict[str, Any]:
-    """Replace the origin in place after a checkpoint has closed out the old one,
-    and write the checkpoint that opens the new one: reanchoring is itself a
-    checkpoint. One commit."""
-    from .cli import _validate_origin
-
-    identifier = thread_id(thread)
-    _require_state(thread, BAD_STATE, verb="reanchored")
-    checkpoint_id = _require_clean(thread, DIRTY, verb="reanchor")
-
-    body = store.strip_comments(source.read_text(encoding="utf-8"))
-    _validate_origin(body, reanchoring=True)
-    old_origin = thread / "origin.md"
-    old_metadata, _ = parse_frontmatter(old_origin.read_text(encoding="utf-8"))
-    old_title = metadata.read(thread)["title"]
-    new_title = title if title is not None else old_title
-    if not new_title.strip() or len(new_title) > 80 or "\n" in new_title:
-        raise ThreadError(
-            f"a thread title is one line of at most 80 characters; this one is {len(new_title)}"
-            f"{' over several lines' if chr(10) in new_title else ''}. Detail belongs in the origin."
-        )
-
-    # Everything that can refuse runs before the first write.
-    checkpoint.parse_body(body_text)
-
-    replacements = [event for event in events.read_events(thread) if event["type"] == "origin-replaced"]
-    previous = f"origin-{len(replacements) + 1}.md"
-    # The origin's frontmatter describes the origin document only; the title
-    # and everything else about the thread live in thread.yml.
-    front: dict[str, Any] = {
-        "thread": old_metadata.get("thread", identifier),
-        "created": events.timestamp(),
-        "by": by,
-        "previous": previous,
-    }
-
-    body = _previous_origin_last(body, f"→ {previous} (replaced after {checkpoint_id})")
-    atomic_text(thread / previous, old_origin.read_text(encoding="utf-8"))
-    atomic_text(old_origin, markdown(front, body))
-    payload = {"previous": previous, "after-checkpoint": checkpoint_id}
-    if new_title != old_title:
-        metadata.update(thread, "title", new_title)
-        payload["title"] = new_title
-    events.append(thread, "origin-replaced", payload, by)
-    written, _ = checkpoint.create(
-        root, thread, None, by, at=None, forced_by="reanchor", body_text=body_text, commit=False,
-        # The clean gate above proved there is no unread work; the CAS would
-        # otherwise see this reanchor's own event.
-        skip_cas=True,
-    )
-    render.write_index(thread)
-    sha = gitops.commit(root, f"reanchor {identifier} after {checkpoint_id}, opened by {written}: {new_title}", [thread])
-    return {
-        "thread": identifier, "previous": previous, "after-checkpoint": checkpoint_id,
-        "checkpoint": written, "title": new_title, "commit": sha,
-    }
-
-
 def link(thread: Path, kind: str, target: Path, by: dict[str, str]) -> dict[str, Any]:
     identifier = thread_id(thread)
     target_id = thread_id(target)
@@ -620,8 +544,6 @@ def revise(root: Path, thread: Path, source: Path, by: dict[str, str]) -> dict[s
     metadata, body = parse_frontmatter(origin.read_text(encoding="utf-8"))
     revision = 1
     for event in reversed(events.read_events(thread)):
-        if event["type"] == "origin-replaced":
-            break
         if event["type"] == "origin-revised":
             revision += 1
     body = body.rstrip("\n")

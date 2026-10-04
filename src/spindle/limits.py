@@ -5,7 +5,6 @@ LIMITS = {
     "outline_chars": 600,
     "status_chars": 3000,
     "from_chars": 1500,
-    "previous_origin_chars": 500,
     "inherited_items": 3,
     "inherited_chars": 160,
     "recent_events": 5,

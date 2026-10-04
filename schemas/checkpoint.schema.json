@@ -47,7 +47,7 @@
     "forced-by": {
       "description": "Set when a structural moment required the checkpoint rather than the author choosing it.",
       "type": "string",
-      "enum": ["merge", "pivot", "complete", "drop", "reanchor"]
+      "enum": ["merge", "pivot", "complete", "drop"]
     },
     "metadata": {
       "description": "thread.yml as it stood when the checkpoint was written: the baseline the view diffs against for its 'thread.yml since the last checkpoint' line. Absent in checkpoints written before 09-25.",
