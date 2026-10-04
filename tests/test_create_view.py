@@ -17,7 +17,7 @@ def test_create_lays_out_the_folder(root, make_thread, run):
     assert path.name == f"{identifier}-thread-cli-tests"
     for name in ("origin.md", "log.jsonl", "tasks.yml", "thread.yml", "index.md"):
         assert (path / name).is_file(), name
-    for name in ("checkpoints", "docs", "artifacts", "scratch"):
+    for name in ("checkpoints", "artifacts", "scratch"):
         assert (path / name).is_dir(), name
     # D13: created, then a claim for the creating session.
     log = events.read_events(path)

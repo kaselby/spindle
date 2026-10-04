@@ -12,7 +12,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from . import scope as scopes
-from . import checkpoint, doctor, events, guide, lifecycle, metadata, render, summary, tasks
+from . import checkpoint, decisions, doctor, events, guide, lifecycle, metadata, render, summary, tasks
 from .limits import LIMITS
 from .store import (
     NeedsInput, ThreadError, atomic_text, initialize, iter_threads, markdown, new_thread_id,
@@ -21,11 +21,6 @@ from .store import (
 )
 
 ORIGIN_TEMPLATE = guide.ORIGIN_TEMPLATE
-# A registration is a doc (docs/, read to understand the work), an artifact
-# (artifacts/, what the work produced), or the thread's reading guide
-# (reading-guide.md at the thread root). The kind must match the path.
-KINDS = ["doc", "artifact", "reading-guide"]
-KIND_FOLDER = {"doc": "docs", "artifact": "artifacts"}
 LINK_KINDS = ["related", "blocked-by", "continues"]
 
 
@@ -141,6 +136,22 @@ def parser() -> argparse.ArgumentParser:
     note.add_argument("--tag", action="append", default=[], help="a tag; repeat for more")
     _common(note, identity=True, data=True)
 
+    decide = commands.add_parser("decide", help="record a decision and why (no body: print the template)")
+    decide.add_argument("thread")
+    decide.add_argument("title", help="one line, at most 80 characters")
+    decide.add_argument("body", type=Path, nargs="?", help="markdown file (leave it out to print the template)")
+    decide.add_argument("--settled", action="store_true",
+                        help="only if the user addressed this decision directly (default: working)")
+    decide.add_argument("--supersedes", metavar="DNNN", help="the decision this one replaces")
+    _common(decide, identity=True, data=True)
+
+    decisions_parser = commands.add_parser(
+        "decisions", help="list a thread's live decisions, or show one (no thread: every active thread)")
+    decisions_parser.add_argument("thread", nargs="?")
+    decisions_parser.add_argument("decision", nargs="?", metavar="DNNN", help="show this decision in full")
+    decisions_parser.add_argument("--all", action="store_true", help="include superseded decisions")
+    _common(decisions_parser, identity=True, data=True)
+
     task = commands.add_parser("task", help="the thread's task list: add, close, remove, list")
     task_commands = task.add_subparsers(dest="task_command", required=True, metavar="<add|close|remove|list>")
     task_add = task_commands.add_parser("add", help="add a task (one line, at most 200 characters)")
@@ -166,16 +177,11 @@ def parser() -> argparse.ArgumentParser:
     _common(promote, identity=True, data=True)
 
     register = commands.add_parser(
-        "register", help="list a file or directory in docs/ or artifacts/ on the view page, "
-                         "or record that the reading guide was written or changed")
+        "register", help="list a file or directory in artifacts/ on the view page")
     register.add_argument("thread")
-    register.add_argument("path", help="relative to the thread folder: under docs/ or artifacts/, or reading-guide.md")
-    register.add_argument("--kind", required=True, choices=KINDS,
-                          help="doc (under docs/), artifact (under artifacts/), or reading-guide (reading-guide.md); "
-                               "must match the path")
-    register.add_argument("--purpose", help="what it is, at most 160 characters (for a reading guide: optional, "
-                                            "what changed)")
-    register.add_argument("--read-when", help="when a reader should open it (required for docs)")
+    register.add_argument("path", help="relative to the thread folder, under artifacts/")
+    register.add_argument("--purpose", required=True, help="what it is, at most 160 characters")
+    register.add_argument("--read-when", help="optional: when a reader should open it, at most 160 characters")
     _common(register, identity=True, data=True)
 
     cp = commands.add_parser("checkpoint", help="record where the work stands (no body: print the template)")
@@ -204,7 +210,7 @@ def parser() -> argparse.ArgumentParser:
     merge = commands.add_parser("merge", help="fold a finished subthread into its parent")
     merge.add_argument("thread", metavar="child")
     merge.add_argument("--promote", nargs="+", action="extend", metavar="REL-PATH",
-                       help="docs/artifacts to copy into the parent (the rest are linked)")
+                       help="artifacts to copy into the parent (the rest are linked)")
     merge.add_argument("--tasks", nargs="+", action="extend", metavar="ID",
                        help="child task ids to copy onto the parent's task list")
     merge.add_argument("--all-tasks", action="store_true", help="copy all the child's open tasks")
@@ -374,7 +380,7 @@ def _create(
     if from_task:
         values["from-task"] = from_task
     try:
-        for folder in ("checkpoints", "docs", "artifacts", "scratch"):
+        for folder in ("checkpoints", "artifacts", "scratch"):
             (destination / folder).mkdir(parents=True, exist_ok=True)
         atomic_text(destination / "origin.md", markdown(front, body))
         metadata.write(destination, values)
@@ -415,49 +421,18 @@ def _registration_path(thread: Path, value: str) -> tuple[str, Path]:
     normalized = PurePosixPath(value)
     if normalized.is_absolute() or ".." in normalized.parts or len(normalized.parts) < 2:
         raise ThreadError(
-            f"register takes a path relative to the thread folder, under docs/ or artifacts/ "
-            f"(like docs/setup.md); got {value}. The folder is {thread}."
+            f"register takes a path relative to the thread folder, under artifacts/ "
+            f"(like artifacts/results.csv); got {value}. The folder is {thread}."
         )
-    if normalized.parts[0] not in {"docs", "artifacts"}:
+    if normalized.parts[0] != "artifacts":
         raise ThreadError(
-            f"register takes a path under docs/ or artifacts/; got {value}. Move the file there first "
+            f"register takes a path under artifacts/; got {value}. Move the file there first "
             f"(the thread folder is {thread})."
         )
     path = thread.joinpath(*normalized.parts)
     if not path.exists():
         raise ThreadError(f"{thread / value} doesn't exist. Put the file there first, then register it.")
     return normalized.as_posix(), path
-
-
-def _register_reading_guide(thread: Path, identifier: str, args: argparse.Namespace, by: dict[str, str]) -> None:
-    """Record that the reading guide was written or changed. The view shows the
-    file itself; the event puts the change in the log and on replay."""
-    if PurePosixPath(args.path).as_posix() != guide.READING_GUIDE:
-        raise ThreadError(
-            f"--kind reading-guide is for {guide.READING_GUIDE} at the thread root; got {args.path}. "
-            f"`thread register {identifier} {guide.READING_GUIDE} --kind reading-guide`."
-        )
-    path = thread / guide.READING_GUIDE
-    if not path.is_file():
-        raise ThreadError(f"{path} doesn't exist. Write the guide there first, then register it.")
-    if args.read_when:
-        raise ThreadError("--read-when is for docs; the view page always shows the reading guide.")
-    if args.purpose is not None and not 1 <= len(args.purpose.strip()) <= 160:
-        raise ThreadError(f"--purpose must be 1–160 characters; it is {len(args.purpose.strip())}.")
-    size = len(strip_comments(path.read_text(encoding="utf-8", errors="replace")).strip())
-    cap = LIMITS["reading_guide_chars"]
-    registration: dict[str, str] = {"path": guide.READING_GUIDE, "kind": "reading-guide"}
-    if args.purpose:
-        registration["purpose"] = args.purpose.strip()
-    checkpoint_id = events.state(thread).get("last-checkpoint", {}).get("id", "pending")
-    event = events.append(thread, "register", {"registration": registration, "checkpoint": checkpoint_id}, by)
-    over = size > cap
-    value = {**event, "chars": size, "cap": cap}
-    text = f"Registered the reading guide at {event['id']} ({size:,} of {cap:,} characters)\n"
-    if over:
-        text += ("It is over the cap. Trim it to pointers and a reading order; "
-                 "status and next steps belong in the checkpoint.\n")
-    _emit(value if args.json else text, as_json=args.json)
 
 
 def _size(path: Path) -> int:
@@ -564,6 +539,22 @@ def run(args: argparse.Namespace) -> None:
             ))
         return
 
+    if command == "decisions" and not args.thread:
+        blocks = []
+        found = {}
+        for path in iter_threads(root):
+            if not is_active(path):
+                continue
+            rows = decisions.listing(path, include_superseded=args.all)
+            if rows:
+                found[path.name.split("-", 1)[0]] = decisions.records(path) if args.all else decisions.live(path)
+                blocks.append("\n".join([f"## {path.name.split('-', 1)[0]}: {metadata.title_or_name(path)}", *rows]))
+        if args.json:
+            _emit(found, as_json=True)
+        else:
+            _emit("\n\n".join(blocks) + "\n" if blocks else "No decisions in active threads.\n")
+        return
+
     thread = resolve_thread(root, args.thread)
     _prepare(thread, by)
     identifier = thread.name.split("-", 1)[0]
@@ -637,6 +628,28 @@ def run(args: argparse.Namespace) -> None:
         payload = {"skipped-checkpoint": args.skip} if args.skip else {}
         event = events.append(thread, "release", payload, by)
         _emit(event if args.json else f"Released {thread.name.split('-', 1)[0]} at {event['id']}\n", as_json=args.json)
+    elif command == "decide":
+        command_line = (f'thread decide {identifier} "{args.title}" <file>'
+                        + (" --settled" if args.settled else "")
+                        + (f" --supersedes {args.supersedes}" if args.supersedes else ""))
+        if args.body is None:
+            raise NeedsInput(decisions.template(command_line))
+        value = decisions.decide(
+            thread, args.title, args.body.read_text(encoding="utf-8"), by,
+            settled=args.settled, supersedes=args.supersedes,
+        )
+        replaced = f", superseding {value['supersedes']}" if value.get("supersedes") else ""
+        _emit(value if args.json else f"Recorded {value['decision']} ({value['status']}{replaced}) at {value['path']}\n",
+              as_json=args.json)
+    elif command == "decisions" and args.decision:
+        text = decisions.show(thread, args.decision)
+        _emit({"decision": args.decision.upper(), "text": text} if args.json else text, as_json=args.json)
+    elif command == "decisions":
+        if args.json:
+            _emit(decisions.records(thread) if args.all else decisions.live(thread), as_json=True)
+        else:
+            rows = decisions.listing(thread, include_superseded=args.all)
+            _emit("\n".join(rows) + "\n" if rows else f"No {'' if args.all else 'live '}decisions in {identifier}.\n")
     elif command == "note":
         payload = {"text": args.text}
         if args.tag:
@@ -693,24 +706,8 @@ def run(args: argparse.Namespace) -> None:
         tasks.promote(thread, args.task_id, child_id, by)
         value = {"id": child_id, "path": str(child)}
         _emit(value if args.json else f"Promoted {args.task_id} to {child_id}\n", as_json=args.json)
-    elif command == "register" and args.kind == "reading-guide":
-        _register_reading_guide(thread, identifier, args, by)
     elif command == "register":
-        if args.purpose is None:
-            raise ThreadError('register needs --purpose "<what it is>" (1–160 characters).')
         relpath, path = _registration_path(thread, args.path)
-        folder = relpath.split("/", 1)[0]
-        if KIND_FOLDER[args.kind] != folder:
-            right = "doc" if folder == "docs" else "artifact"
-            raise ThreadError(
-                f"--kind {args.kind} is for files under {KIND_FOLDER[args.kind]}/, and {relpath} is under "
-                f"{folder}/. Use --kind {right}, or move the file to {KIND_FOLDER[args.kind]}/ first."
-            )
-        if relpath.startswith("docs/") and not args.read_when:
-            raise ThreadError(
-                'docs need --read-when "<when a reader should open it>", e.g. "before changing the parser". '
-                "The view page lists each doc with it."
-            )
         if len(args.purpose) > 160 or not args.purpose.strip():
             raise ThreadError(f"--purpose must be 1–160 characters; it is {len(args.purpose.strip())}.")
         if args.read_when and len(args.read_when) > 160:
@@ -721,7 +718,7 @@ def run(args: argparse.Namespace) -> None:
                 f"{subject} is over 5 MB. Store it outside the thread and register a small artifact that "
                 "says where it is instead."
             )
-        registration = {"path": relpath, "kind": args.kind, "purpose": args.purpose}
+        registration = {"path": relpath, "purpose": args.purpose}
         if args.read_when:
             registration["read-when"] = args.read_when
         checkpoint_id = events.state(thread).get("last-checkpoint", {}).get("id", "pending")
@@ -784,7 +781,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"permission denied: {exc.filename}", file=sys.stderr)
         return 2
     except UnicodeDecodeError as exc:
-        # thread.yml and the reading guide handle this themselves; this is the
+        # thread.yml and orientation.md handle this themselves; this is the
         # backstop for any other file, so it never ends in a traceback.
         print(
             f"a file isn't UTF-8 text ({exc.reason} at byte {exc.start}). `thread doctor` names the thread.",

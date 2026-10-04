@@ -155,10 +155,10 @@ def _undo_copies(copied: list[Path]) -> None:
             shutil.rmtree(path, ignore_errors=True)
         else:
             path.unlink(missing_ok=True)
-        # Subdirectories the copy created are now empty; docs/ and artifacts/
-        # themselves belong to the thread layout, so stop there.
+        # Subdirectories the copy created are now empty; artifacts/ itself
+        # belongs to the thread layout, so stop there.
         parent = path.parent
-        while parent.name not in ("docs", "artifacts") and parent.is_dir() and not any(parent.iterdir()):
+        while parent.name != "artifacts" and parent.is_dir() and not any(parent.iterdir()):
             parent.rmdir()
             parent = parent.parent
 
@@ -194,13 +194,14 @@ def _register(parent: Path, registration: dict[str, Any], by: dict[str, str], **
 
 
 def _registered(thread: Path) -> dict[str, dict[str, Any]]:
-    """Registered docs/artifacts (and the reading guide) held in this thread, newest registration wins.
+    """Registered artifacts held in this thread, newest registration wins.
     Pointers are other threads' files, so they are not promotable."""
     found: dict[str, dict[str, Any]] = {}
     for payload, _ in render.registrations(thread):
-        if payload.get("pointer"):
+        if payload.get("pointer") or payload["registration"].get("kind") == "reading-guide":
             continue
         registration = dict(payload["registration"])
+        registration.pop("kind", None)  # registrations written before 10-04 carried a kind
         found[registration["path"]] = registration
     return found
 
@@ -272,8 +273,14 @@ def merge(
         if relative not in registered:
             known = ", ".join(sorted(registered)[:10]) or "none"
             raise ThreadError(
-                f"--promote takes docs or artifacts registered in {child_id}, and {relative} isn't one. "
+                f"--promote takes artifacts registered in {child_id}, and {relative} isn't one. "
                 f"Registered: {known}. (`thread register {child_id} <path> ...` registers a file.)",
+                code=NOT_REGISTERED,
+            )
+        if not relative.startswith("artifacts/"):
+            raise ThreadError(
+                f"{relative} was registered as a doc, before docs were retired, so it can't be copied into "
+                f"{parent_id}. It stays in {child_id}, and {parent_id}'s index points to it.",
                 code=NOT_REGISTERED,
             )
         if relative not in wanted:
@@ -306,13 +313,12 @@ def merge(
     pointers = [relative for relative in registered if relative not in wanted]
     rolling_ids = {task.get("id") for task in rolling}
     left_tasks = sum(1 for task in board if not task.get("done") and task.get("id") not in rolling_ids)
-    left_docs = sum(1 for relative in pointers if relative.startswith("docs/"))
-    left_artifacts = sum(1 for relative in pointers if relative.startswith("artifacts/"))
+    left_artifacts = len(pointers)
 
     def facts(moved: list[tuple[str, str | None]]) -> str:
         return guide.merge_facts(
             child_id, parent_id, child_cid, _headline(child), wanted, moved,
-            left_docs, left_artifacts, left_tasks,
+            left_artifacts, left_tasks,
         )
 
     if body is None:

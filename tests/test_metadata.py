@@ -1,5 +1,5 @@
 """thread.yml as the thread's metadata: validated on every read,
-edited by hand, diffed on the view page; the reading guide; register kinds;
+edited by hand, diffed on the view page; orientation.md; old register kinds;
 `list --flag`."""
 
 from __future__ import annotations
@@ -7,11 +7,10 @@ from __future__ import annotations
 import json
 from datetime import timedelta
 
-import pytest
 import yaml
 
 from conftest import git
-from spindle import events, metadata, store
+from spindle import events, metadata, render, store
 from spindle.limits import LIMITS
 
 
@@ -226,25 +225,6 @@ def test_checkpoints_record_the_metadata_baseline(root, make_thread, run, body):
 # ── register ─────────────────────────────────────────────────────────────────
 
 
-def test_register_refuses_a_kind_that_does_not_match_the_folder(root, make_thread, run):
-    identifier = make_thread()
-    path = store.resolve_thread(root, identifier)
-    (path / "artifacts" / "out.csv").write_text("a\n", encoding="utf-8")
-    (path / "docs" / "how.md").write_text("# how", encoding="utf-8")
-
-    wrong = run("register", identifier, "artifacts/out.csv", "--kind", "doc", "--purpose", "p",
-                "--read-when", "w", "--root", root)
-    assert wrong.code == 2
-    assert "--kind doc is for files under docs/, and artifacts/out.csv is under artifacts/" in wrong.err
-    assert "Use --kind artifact" in wrong.err
-    wrong = run("register", identifier, "docs/how.md", "--kind", "artifact", "--purpose", "p", "--root", root)
-    assert wrong.code == 2 and "Use --kind doc" in wrong.err
-    with pytest.raises(SystemExit):  # argparse: the retired kinds aren't choices
-        run("register", identifier, "docs/how.md", "--kind", "guide", "--purpose", "p",
-            "--read-when", "w", "--root", root)
-    assert not [e for e in events.read_events(path) if e["type"] == "register"]
-
-
 def test_old_register_kinds_still_read(root, make_thread, run):
     identifier = make_thread()
     path = store.resolve_thread(root, identifier)
@@ -256,29 +236,57 @@ def test_old_register_kinds_still_read(root, make_thread, run):
     view = run("view", identifier, "--root", root)
     assert view.code == 0, view.err
     assert "- **artifacts/w.bin** (" in view.out and "— old weights" in view.out
-    assert "weights," not in view.out.split("## Artifacts")[1]
+    assert "weights," not in view.out.split("# Artifacts")[1]
 
 
-# ── reading guide ────────────────────────────────────────────────────────────
+def test_old_doc_and_reading_guide_registrations_in_the_log(root, make_thread, run):
+    """Logs written before docs and the registered reading guide were retired:
+    an old docs/ path lists as an artifact; a reading-guide registration is skipped."""
+    identifier = make_thread()
+    path = store.resolve_thread(root, identifier)
+    (path / "docs").mkdir()
+    (path / "docs" / "how.md").write_text("# how", encoding="utf-8")
+    (path / "reading-guide.md").write_text("1. x\n", encoding="utf-8")
+    old = {"session": "old", "agent": "old"}
+    events.append(path, "register", {
+        "registration": {"path": "docs/how.md", "kind": "doc", "purpose": "how it works",
+                         "read-when": "before changing it"},
+        "checkpoint": "pending",
+    }, old)
+    events.append(path, "register", {
+        "registration": {"path": "reading-guide.md", "kind": "reading-guide", "purpose": "added a branch"},
+        "checkpoint": "pending",
+    }, old)
+    view = run("view", identifier, "--root", root)
+    assert view.code == 0, view.err
+    listing = view.out.split("# Artifacts", 1)[1].split("# Related threads", 1)[0]
+    assert "- **docs/how.md** (" in listing and ") — how it works\n  *Read when:* before changing it" in listing
+    assert "reading-guide" not in listing
+    render.write_index(path)
+    index = (path / "index.md").read_text(encoding="utf-8")
+    assert "- **docs/how.md** (" in index and "reading-guide" not in index
 
 
-def test_the_view_shows_the_reading_guide_before_the_docs(root, make_thread, run):
+# ── orientation.md ───────────────────────────────────────────────────────────
+
+
+def test_the_view_shows_orientation_before_the_artifacts(root, make_thread, run):
     identifier = make_thread()
     path = store.resolve_thread(root, identifier)
     missing = run("view", identifier, "--root", root).out
-    assert "# Reading guide" not in missing
-    assert "reading guide" not in missing.lower()  # no guide, no mention of one
+    assert "# Orientation" not in missing  # no file, no section
 
-    (path / "reading-guide.md").write_text(
-        "<!-- the rule, hidden -->\n1. `docs/plan.md` first.\n2. Then ~/Git/Spindle on branch main.\n",
+    (path / "orientation.md").write_text(
+        "<!-- the rule, hidden -->\n1. `artifacts/plan.md` first.\n2. Then ~/Git/Spindle on branch main.\n",
         encoding="utf-8",
     )
     view = run("view", identifier, "--root", root).out
-    guide_at = view.index("# Reading guide\n1. `docs/plan.md` first.\n2. Then ~/Git/Spindle on branch main.")
-    assert guide_at < view.index("# Docs and artifacts")
+    at = view.index("# Orientation\n1. `artifacts/plan.md` first.\n2. Then ~/Git/Spindle on branch main.")
+    assert at < view.index("# Artifacts")
     assert "the rule, hidden" not in view
-    # Not registered, not in the index.
-    assert "reading-guide" not in (path / "index.md").read_text(encoding="utf-8")
+    # Never registered: not in the index, and no register event.
+    assert "orientation" not in (path / "index.md").read_text(encoding="utf-8")
+    assert not [e for e in events.read_events(path) if e["type"] == "register"]
 
 
 def test_registering_a_path_again_replaces_its_entry(root, make_thread, run):
@@ -286,100 +294,58 @@ def test_registering_a_path_again_replaces_its_entry(root, make_thread, run):
     path = store.resolve_thread(root, identifier)
     (path / "artifacts" / "a.csv").write_text("a\n", encoding="utf-8")
     for purpose in ("first version", "second version"):
-        assert run("register", identifier, "artifacts/a.csv", "--kind", "artifact",
+        assert run("register", identifier, "artifacts/a.csv",
                    "--purpose", purpose, "--root", root).code == 0
-    for text in (run("view", identifier, "--root", root).out, (path / "index.md").read_text(encoding="utf-8")):
-        listing = text[text.index("## Artifacts"):]
+    view = run("view", identifier, "--root", root).out
+    for listing in (view[view.index("# Artifacts"):], (path / "index.md").read_text(encoding="utf-8")):
         assert listing.count("**artifacts/a.csv**") == 1
         assert "second version" in listing and "first version" not in listing
 
 
-def test_register_records_the_reading_guide(root, make_thread, run):
+def test_orientation_is_never_registered(root, make_thread, run):
     identifier = make_thread()
     path = store.resolve_thread(root, identifier)
-    missing = run("register", identifier, "reading-guide.md", "--kind", "reading-guide", "--root", root)
-    assert missing.code != 0 and "doesn't exist" in missing.err
-
-    (path / "reading-guide.md").write_text("<!-- hidden -->\n1. `docs/a.md`\n", encoding="utf-8")
-    first = run("register", identifier, "reading-guide.md", "--kind", "reading-guide", "--root", root)
-    assert first.code == 0, first.err
-    assert "(14 of 1,500 characters)" in first.out and "over the cap" not in first.out
-    changed = run("register", identifier, "reading-guide.md", "--kind", "reading-guide",
-                  "--purpose", "added the parser branch", "--root", root)
-    assert changed.code == 0, changed.err
-
-    replay = run("replay", identifier, "--root", root).out
-    assert "register by" in replay and "reading guide updated\n" in replay
-    assert "reading guide updated: added the parser branch" in replay
-    # Not a doc or artifact: the index and the view's list leave it out.
-    assert "reading-guide" not in (path / "index.md").read_text(encoding="utf-8")
-    assert "remain in merged" not in run("view", identifier, "--root", root).out
-
-    (path / "reading-guide.md").write_text("x" * (LIMITS["reading_guide_chars"] + 1), encoding="utf-8")
-    over = run("register", identifier, "reading-guide.md", "--kind", "reading-guide", "--root", root)
-    assert over.code == 0 and "over the cap" in over.out
-
-
-def test_register_reading_guide_refuses_the_wrong_shape(root, make_thread, run):
-    identifier = make_thread()
-    path = store.resolve_thread(root, identifier)
-    (path / "reading-guide.md").write_text("1. x\n", encoding="utf-8")
-    (path / "docs" / "a.md").write_text("x", encoding="utf-8")
-    wrong_path = run("register", identifier, "docs/a.md", "--kind", "reading-guide", "--root", root)
-    assert wrong_path.code != 0 and "reading-guide.md at the thread root" in wrong_path.err
-    read_when = run("register", identifier, "reading-guide.md", "--kind", "reading-guide",
-                    "--read-when", "always", "--root", root)
-    assert read_when.code != 0 and "--read-when is for docs" in read_when.err
-    as_doc = run("register", identifier, "reading-guide.md", "--kind", "doc", "--purpose", "p",
-                 "--read-when", "r", "--root", root)
-    assert as_doc.code != 0
-    # Docs and artifacts still need a purpose.
-    no_purpose = run("register", identifier, "docs/a.md", "--kind", "doc", "--read-when", "r", "--root", root)
-    assert no_purpose.code != 0 and "--purpose" in no_purpose.err
-
-
-def test_doctor_flags_an_unregistered_reading_guide(root, make_thread, run):
-    identifier = make_thread()
-    path = store.resolve_thread(root, identifier)
-    (path / "reading-guide.md").write_text("1. x\n", encoding="utf-8")
-    findings = json.loads(run("doctor", identifier, "--root", root, "--json").out)[identifier]
-    assert any(name == "unregistered" and detail.startswith("reading-guide.md isn't registered")
-               and "--kind reading-guide" in detail for name, detail in findings)
-    assert run("register", identifier, "reading-guide.md", "--kind", "reading-guide", "--root", root).code == 0
+    (path / "orientation.md").write_text("1. x\n", encoding="utf-8")
     findings = json.loads(run("doctor", identifier, "--root", root, "--json").out)[identifier]
     assert not any(name == "unregistered" for name, _ in findings)
+    refused = run("register", identifier, "orientation.md", "--purpose", "p", "--root", root)
+    assert refused.code == 2 and "under artifacts/" in refused.err
+    assert not [e for e in events.read_events(path) if e["type"] == "register"]
 
 
-def test_doctor_checks_the_reading_guides_cap_and_local_paths(root, make_thread, run, tmp_path):
+def test_doctor_checks_orientations_cap_and_local_paths(root, make_thread, run, tmp_path):
     other = make_thread("Other thread")
     identifier = make_thread("Guided")
     path = store.resolve_thread(root, identifier)
-    (path / "docs" / "here.md").write_text("x", encoding="utf-8")
-    (store.resolve_thread(root, other) / "docs" / "there.md").write_text("x", encoding="utf-8")
+    (path / "artifacts" / "here.md").write_text("x", encoding="utf-8")
+    (store.resolve_thread(root, other) / "artifacts" / "there.md").write_text("x", encoding="utf-8")
     real = tmp_path / "real.txt"
     real.write_text("x", encoding="utf-8")
-    (path / "reading-guide.md").write_text("\n".join([
-        "1. `docs/here.md`, then `docs/gone.md`.",
+    (path / "orientation.md").write_text("\n".join([
+        "1. `artifacts/here.md`, then `artifacts/gone.md`.",
         f"2. {real} and {tmp_path}/missing.txt",
-        f"3. {other}:docs/there.md and {other}:docs/nope.md and zzzz99:docs/x.md",
-        "4. https://example.com/docs/whatever and branch feature/docs-rework, PR #12",
+        f"3. {other}:artifacts/there.md and {other}:artifacts/nope.md and zzzz99:artifacts/x.md",
+        "4. https://example.com/artifacts/whatever and branch feature/artifacts-rework, PR #12",
         "5. ~/definitely-not-here-9eu8w2/file",
+        # docs/ is no longer a path marker, bare or thread-qualified.
+        f"6. docs/old.md and {other}:docs/old.md",
     ]) + "\n", encoding="utf-8")
 
     findings = json.loads(run("doctor", identifier, "--root", root, "--json").out)[identifier]
     dead = sorted(detail.split(" points at ")[1].split(",")[0] for name, detail in findings
-                  if name == "reading-guide-dead-path")
+                  if name == "orientation-dead-path")
     assert dead == sorted([
-        "docs/gone.md", f"{tmp_path}/missing.txt", f"{other}:docs/nope.md", "zzzz99:docs/x.md",
+        "artifacts/gone.md", f"{tmp_path}/missing.txt", f"{other}:artifacts/nope.md", "zzzz99:artifacts/x.md",
         "~/definitely-not-here-9eu8w2/file",
     ])
-    assert not any(name == "reading-guide-too-long" for name, _ in findings)
+    assert not any(name == "orientation-too-long" for name, _ in findings)
+    assert not any(name.startswith("reading-guide") for name, _ in findings)
 
-    (path / "reading-guide.md").write_text("x" * (LIMITS["reading_guide_chars"] + 1), encoding="utf-8")
+    (path / "orientation.md").write_text("x" * (LIMITS["orientation_chars"] + 1), encoding="utf-8")
     findings = json.loads(run("doctor", identifier, "--root", root, "--json").out)[identifier]
-    loud = [detail for name, detail in findings if name == "reading-guide-too-long"]
-    assert loud and loud[0].startswith("**reading-guide.md is 1,501 characters, over the 1,500 cap.**")
-    # The view still shows a guide over the cap.
+    loud = [detail for name, detail in findings if name == "orientation-too-long"]
+    assert loud and loud[0].startswith("**orientation.md is 1,501 characters, over the 1,500 cap.**")
+    # The view still shows orientation over the cap.
     assert "x" * 100 in run("view", identifier, "--root", root).out
 
 

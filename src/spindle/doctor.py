@@ -100,12 +100,12 @@ def check_scratch(thread: Path, _: dict[str, str]) -> list[Finding]:
     if newer:
         result.append(("scratch-newer", (
             f"{len(newer)} scratch files changed since the last checkpoint. Before the next checkpoint, "
-            "move anything worth keeping into docs/ or artifacts/ and `thread register` it."
+            "move anything worth keeping into artifacts/ and `thread register` it."
         )))
     if old:
         result.append(("old-scratch", (
             f"{len(old)} scratch files are older than {LIMITS['old_scratch_days']} days. Delete them, "
-            "or move keepers into docs/ or artifacts/ and `thread register` them."
+            "or move keepers into artifacts/ and `thread register` them."
         )))
     return result
 
@@ -123,26 +123,17 @@ def check_unregistered(thread: Path, _: dict[str, str]) -> list[Finding]:
     }
     files = {
         path.relative_to(thread).as_posix()
-        for folder in (thread / "docs", thread / "artifacts")
+        for folder in (thread / "artifacts",)
         for path in folder.rglob("*") if path.is_file()
     }
     missing = sorted(
         path for path in files
         if path not in registered and not any(path.startswith(f"{directory}/") for directory in directories)
     )
-    if (thread / guide.READING_GUIDE).is_file() and guide.READING_GUIDE not in registered:
-        missing.append(guide.READING_GUIDE)
     return [
-
         ("unregistered", (
-            f"{path} isn't registered, so its changes aren't in the log. "
-            f"`thread register {_id(thread)} {path} --kind reading-guide`."
-        )) if path == guide.READING_GUIDE else ("unregistered", (
             f"{path} isn't registered, so the view page doesn't list it. "
-            f"`thread register {_id(thread)} {path} --kind {'doc' if path.startswith('docs/') else 'artifact'} "
-            f"--purpose \"...\"`"
-            + (" --read-when \"...\"" if path.startswith("docs/") else "")
-            + ", or delete it."
+            f"`thread register {_id(thread)} {path} --purpose \"...\"`, or delete it."
         ))
         for path in missing
     ]
@@ -265,19 +256,19 @@ def _parent_cycle(root: Path, thread: Path, limit: int = 100) -> list[str]:
     return []
 
 
-# Local paths in a reading guide: absolute, home, relative, this thread's
-# docs/ and artifacts/, or another thread's `<id>:docs/...`. URLs are removed
+# Local paths in orientation.md: absolute, home, relative, this thread's
+# artifacts/, or another thread's `<id>:artifacts/...`. URLs are removed
 # first; branch names and the like don't match (no leading marker).
 _URL = re.compile(r"[a-z][a-z0-9+.-]*://\S+", re.I)
 _PATH = re.compile(
     r"(?<![\w/.~:-])"
-    r"(?:~/|\.\./|\./|/(?=[^\s/])|docs/|artifacts/|[a-z0-9]{6,12}:(?:docs|artifacts)/)"
+    r"(?:~/|\.\./|\./|/(?=[^\s/])|artifacts/|[a-z0-9]{6,12}:artifacts/)"
     r"[^\s`'\"()<>\[\]{}|*]*"
 )
 
 
 def guide_paths(text: str) -> list[str]:
-    """The local path tokens doctor checks in a reading guide, in order."""
+    """The local path tokens doctor checks in orientation.md, in order."""
     text = _URL.sub(" ", text)
     found = []
     for match in _PATH.finditer(text):
@@ -302,25 +293,24 @@ def _resolve_guide_path(thread: Path, token: str) -> Path | None:
     return thread / token
 
 
-def check_reading_guide(thread: Path, _: dict[str, str]) -> list[Finding]:
-    path = thread / guide.READING_GUIDE
+def check_orientation(thread: Path, _: dict[str, str]) -> list[Finding]:
+    path = thread / guide.ORIENTATION
     if not path.is_file():
         return []
     text = path.read_text(encoding="utf-8", errors="replace")
     result = []
     size = len(guide.strip_comments(text).strip())
-    cap = LIMITS["reading_guide_chars"]
+    cap = LIMITS["orientation_chars"]
     if size > cap:
-        result.append(("reading-guide-too-long", (
-            f"**reading-guide.md is {size:,} characters, over the {cap:,} cap.** That is usually "
-            "status or next steps creeping in. Move those to the checkpoint and keep only pointers "
-            "and the order to read them in."
+        result.append(("orientation-too-long", (
+            f"**orientation.md is {size:,} characters, over the {cap:,} cap.** That is usually "
+            "status or next steps creeping in. Move those to the checkpoint."
         )))
     for token in guide_paths(guide.strip_comments(text)):
         target = _resolve_guide_path(thread, token)
         if target is None or not target.exists():
-            result.append(("reading-guide-dead-path", (
-                f"reading-guide.md points at {token}, which doesn't exist. Fix the path or remove the line."
+            result.append(("orientation-dead-path", (
+                f"orientation.md points at {token}, which doesn't exist. Fix the path or remove the line."
             )))
     return result
 
@@ -330,7 +320,7 @@ CHEAP: tuple[Callable[[Path, dict[str, str]], list[Finding]], ...] = (
 )
 FULL: tuple[Callable[[Path, dict[str, str]], list[Finding]], ...] = (
     *CHEAP, check_metadata, check_inactive, check_scratch, check_unregistered, check_orphan_promotions,
-    check_dangling_pointers, check_dangling_links, check_unarchived, check_reading_guide,
+    check_dangling_pointers, check_dangling_links, check_unarchived, check_orientation,
 )
 
 

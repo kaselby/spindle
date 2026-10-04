@@ -16,5 +16,5 @@ LIMITS = {
     "inactive_days": 14,
     "context_inactive": 10,
     "old_scratch_days": 30,
-    "reading_guide_chars": 1500,
+    "orientation_chars": 1500,
 }

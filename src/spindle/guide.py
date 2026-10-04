@@ -139,7 +139,7 @@ def _count(number: int, noun: str) -> str:
 
 def merge_facts(child_id: str, parent_id: str, child_checkpoint: str, child_headline: str,
                 promoted: list[str], moved: list[tuple[str, str | None]],
-                left_docs: int, left_artifacts: int, left_tasks: int) -> str:
+                left_artifacts: int, left_tasks: int) -> str:
     """The block the tool writes under the author's narrative in `## From <child>`.
 
     ``moved`` is (task text, its new id on the parent); the id is None in the
@@ -152,7 +152,7 @@ def merge_facts(child_id: str, parent_id: str, child_checkpoint: str, child_head
         f"- Final checkpoint: {child_checkpoint}, \"{child_headline}\"",
         f"- Promoted to {parent_id}: {', '.join(promoted) or 'none'}",
         f"- Tasks moved to {parent_id}: {tasks}",
-        f"- Left in {child_id}: {_count(left_docs, 'doc')}, {_count(left_artifacts, 'artifact')}, "
+        f"- Left in {child_id}: {_count(left_artifacts, 'artifact')}, "
         f"{_count(left_tasks, 'open task')} (`thread view {child_id}`)",
     ]) + "\n"
 
@@ -210,4 +210,4 @@ def bad_namespace(value: str, source: str) -> str:
     return f"{source} {value!r} isn't a valid namespace. A namespace is {NAMESPACE_RULE}. {fix}"
 
 
-READING_GUIDE = "reading-guide.md"
+ORIENTATION = "orientation.md"

@@ -27,6 +27,7 @@
         "register",
         "state-changed",
         "origin-revised",
+        "decided",
         "linked",
         "unlinked",
         "merged-into",
@@ -311,6 +312,24 @@
       "then": {
         "description": "On the thread being reopened, immediately before its state-changed from a final state (completed, dropped, merged) to active.",
         "properties": { "payload": { "type": "object", "additionalProperties": false, "properties": {} } }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "decided" } } },
+      "then": {
+        "description": "A decision was recorded in decisions/<file>. working is the current best judgement; settled means the user addressed it directly. supersedes names the decision it replaces, which stays on disk marked superseded-by.",
+        "properties": { "payload": {
+          "type": "object", "additionalProperties": false,
+          "required": ["decision", "title", "status", "file"],
+          "properties": {
+            "decision": { "type": "string", "pattern": "^D[0-9]{3,}$" },
+            "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+            "status": { "enum": ["working", "settled"] },
+            "file": { "type": "string", "pattern": "^decisions/D[0-9]{3,}-[^/]+\\.md$" },
+            "supersedes": { "type": "string", "pattern": "^D[0-9]{3,}$" }
+          }
+        } },
+        "required": ["payload"]
       }
     }
   ]

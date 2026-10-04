@@ -62,14 +62,14 @@ def exercised(root, make_thread, run, origin, body, tmp_path):
     assert run("unlink", identifier, "related", child, "--root", root).code == 0
     assert run("link", identifier, "blocked-by", child, "--root", root).code == 0
 
-    (path / "docs" / "guide.md").write_text("# guide", encoding="utf-8")
+    (path / "artifacts" / "guide.md").write_text("# guide", encoding="utf-8")
     assert run(
-        "register", identifier, "docs/guide.md", "--kind", "doc", "--purpose", "orientation",
+        "register", identifier, "artifacts/guide.md", "--purpose", "orientation",
         "--read-when", "before checkpointing", "--root", root,
     ).code == 0
     (path / "artifacts" / "report.md").write_text("# report", encoding="utf-8")
     assert run(
-        "register", identifier, "artifacts/report.md", "--kind", "artifact",
+        "register", identifier, "artifacts/report.md",
         "--purpose", "the write-up", "--root", root,
     ).code == 0
 
@@ -144,6 +144,19 @@ def test_the_validator_rejects_the_shapes_the_schemas_retired(validators, exerci
     assert list(validators["event.schema.json"].iter_errors(
         {**merged, "payload": {"child": "k7q2m9xa"}}
     ))
+    # Registrations lost their kind, docs/ and the reading guide.
+    register = next(e for e in events.read_events(path) if e["type"] == "register")
+    assert not list(validators["event.schema.json"].iter_errors(register))
+    registration = register["payload"]["registration"]
+    for retired in (
+        {**registration, "kind": "artifact"},
+        {**registration, "path": "docs/guide.md"},
+        {"path": "reading-guide.md", "kind": "reading-guide"},
+        {"path": "orientation.md", "purpose": "p"},
+    ):
+        assert list(validators["event.schema.json"].iter_errors(
+            {**register, "payload": {**register["payload"], "registration": retired}}
+        )), retired
     checkpoint, _ = store.parse_frontmatter(
         (path / "checkpoints" / "c0001.md").read_text(encoding="utf-8")
     )
@@ -163,11 +176,11 @@ def exercised_phase_two(root, make_thread, run, origin, body, tmp_path):
     child = make_thread("Phase two child", "--parent", parent)
     grandchild = make_thread("Phase two grandchild", "--parent", child)
     child_path = store.resolve_thread(root, child)
-    (child_path / "docs" / "guide.md").write_text("# guide", encoding="utf-8")
+    (child_path / "artifacts" / "guide.md").write_text("# guide", encoding="utf-8")
     (child_path / "artifacts" / "data.csv").write_text("a\n1\n", encoding="utf-8")
-    assert run("register", child, "docs/guide.md", "--kind", "doc", "--purpose", "orientation",
+    assert run("register", child, "artifacts/guide.md", "--purpose", "orientation",
                "--read-when", "before merging", "--root", root).code == 0
-    assert run("register", child, "artifacts/data.csv", "--kind", "artifact",
+    assert run("register", child, "artifacts/data.csv",
                "--purpose", "the numbers", "--root", root).code == 0
     assert run("task", "add", child, "carry this to the parent", "--root", root).code == 0
     for identifier in (child, grandchild, parent):
@@ -175,7 +188,7 @@ def exercised_phase_two(root, make_thread, run, origin, body, tmp_path):
 
     merge_body = body(f"Merged {child}: phase two is in.\n\n## From {child}\n"
                       "It ran every verb once.\n\n## Status\nGreen.\n")
-    assert run("merge", child, "--promote", "docs/guide.md", "--all-tasks", "--force",
+    assert run("merge", child, "--promote", "artifacts/guide.md", "--all-tasks", "--force",
                "--body", merge_body, "--root", root).code == 0
     # The merge reparented the grandchild, so it needs a checkpoint before it can be dropped.
     checkpoint(grandchild, "Adopted by the parent.\n\n## Status\nStill green.\n")
@@ -187,6 +200,12 @@ def exercised_phase_two(root, make_thread, run, origin, body, tmp_path):
     revision.write_text("The scope narrowed.\n", encoding="utf-8")
     assert run("revise", grandchild, revision, "--root", root).code == 0
     checkpoint(grandchild, "After the revision.\n\n## Status\nStill green.\n")
+    decision = tmp_path / "decision.md"
+    decision.write_text("## Decision\nKeep it.\n\n## Why\nIt works.\n", encoding="utf-8")
+    assert run("decide", grandchild, "Keep it", decision, "--root", root).code == 0
+    assert run("decide", grandchild, "Keep it, settled", decision, "--settled", "--supersedes", "D001",
+               "--root", root).code == 0
+    checkpoint(grandchild, "Decided.\n\n## Status\nStill green.\n")
     assert run("archive", "--root", root).code == 0
     assert run("doctor", "--root", root).code == 0
     return root
@@ -213,7 +232,7 @@ def test_phase_two_writes_only_schema_valid_files(validators, exercised_phase_tw
             check(validators, "checkpoint.schema.json", front, f"{label} {checkpoint.name}")
     assert seen >= {
         "merged-into", "child-merged", "child-dropped", "child-reopened",
-        "child-adopted", "reparented", "reopened", "origin-revised", "state-changed",
+        "child-adopted", "reparented", "reopened", "origin-revised", "decided", "state-changed",
     }
 
 

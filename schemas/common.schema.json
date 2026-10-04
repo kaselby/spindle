@@ -53,54 +53,30 @@
       "enum": ["active", "inactive", "merged", "completed", "dropped"]
     },
     "relPath": {
-      "description": "Path relative to the thread folder, forward slashes: under docs/ or artifacts/, or the reading guide.",
+      "description": "Path relative to the thread folder, forward slashes, under artifacts/.",
       "type": "string",
-      "pattern": "^((docs|artifacts)/[^/].*|reading-guide\\.md)$"
+      "pattern": "^artifacts/[^/].*$"
     },
     "registration": {
-      "description": "A doc or artifact listed on the thread's view page, or an update to the thread's reading guide. Docs are orientation guides meant to steer future work; artifacts are records. Docs also need read-when; the reading guide needs no purpose.",
+      "description": "An artifact listed on the thread's view page.",
       "type": "object",
-      "required": ["path", "kind"],
+      "required": ["path", "purpose"],
       "additionalProperties": false,
       "properties": {
         "path": { "$ref": "#/$defs/relPath" },
-        "kind": {
-          "description": "doc (the path is under docs/), artifact (under artifacts/), or reading-guide (reading-guide.md); the tool refuses a kind that doesn't match the path.",
-          "type": "string",
-          "enum": ["doc", "artifact", "reading-guide"]
-        },
         "purpose": {
-          "description": "One line: what this is for (for the reading guide, optional: what changed). Capped so the index stays one line per entry.",
+          "description": "One line: what this is. Capped so the index stays one line per entry.",
           "type": "string",
           "minLength": 1,
           "maxLength": 160
         },
         "read-when": {
-          "description": "Docs only: when a future agent should read this before acting. Required for paths under docs/.",
+          "description": "Optional: when a future session should open it.",
           "type": "string",
           "minLength": 1,
           "maxLength": 160
         }
-      },
-      "allOf": [
-        {
-          "if": { "properties": { "path": { "pattern": "^docs/" } } },
-          "then": { "required": ["read-when"] }
-        },
-        {
-          "if": { "properties": { "kind": { "const": "doc" } }, "required": ["kind"] },
-          "then": { "properties": { "path": { "pattern": "^docs/" } } }
-        },
-        {
-          "if": { "properties": { "kind": { "const": "artifact" } }, "required": ["kind"] },
-          "then": { "properties": { "path": { "pattern": "^artifacts/" } } }
-        },
-        {
-          "if": { "properties": { "kind": { "const": "reading-guide" } }, "required": ["kind"] },
-          "then": { "properties": { "path": { "const": "reading-guide.md" } }, "not": { "required": ["read-when"] } },
-          "else": { "required": ["purpose"], "properties": { "path": { "pattern": "^(docs|artifacts)/" } } }
-        }
-      ]
+      }
     }
   }
 }

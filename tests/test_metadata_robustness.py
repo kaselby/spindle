@@ -206,15 +206,15 @@ def test_reopen_refuses_a_dangling_parent_before_moving_anything(root, run, body
 # ── 5. non-UTF-8 files ───────────────────────────────────────────────────────
 
 
-def test_a_non_utf8_reading_guide_doesnt_break_view_or_doctor(root, run, make_thread):
+def test_a_non_utf8_orientation_doesnt_break_view_or_doctor(root, run, make_thread):
     identifier = make_thread("Guide")
-    (_path(root, identifier) / "reading-guide.md").write_bytes(b"Read docs/plan.md first \xff\xfe\n")
+    (_path(root, identifier) / "orientation.md").write_bytes(b"Read artifacts/plan.md first \xff\xfe\n")
     view = run("view", identifier, "--root", root)
     assert view.code == 0, view.err
-    assert "# Reading guide" in view.out and "Read docs/plan.md first" in view.out
+    assert "# Orientation" in view.out and "Read artifacts/plan.md first" in view.out
     report = run("doctor", identifier, "--root", root).out
     assert "**unreadable:**" not in report
-    assert "reading-guide-dead-path" in report  # the other checks still ran
+    assert "orientation-dead-path" in report  # the other checks still ran
 
 
 def test_a_non_utf8_thread_yml_is_a_metadata_error(root, run, make_thread):

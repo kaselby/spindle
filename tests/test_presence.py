@@ -65,7 +65,7 @@ def test_skipped_checkpoint_banner_reports_event_kinds_and_clears_at_checkpoint(
         artifact = path / "artifacts" / f"run-{n}.txt"
         artifact.write_text(str(n), encoding="utf-8")
         assert run(
-            "register", identifier, f"artifacts/run-{n}.txt", "--kind", "artifact",
+            "register", identifier, f"artifacts/run-{n}.txt",
             "--purpose", f"run {n}", "--root", root,
         ).code == 0
     for n in range(3):
@@ -139,12 +139,12 @@ def test_doctor_full_checks(root, make_thread, run, body, tmp_path):
     assert run("checkpoint", identifier, body(), "--root", root).code == 0
 
     (path / "scratch" / "notes.txt").write_text("thinking out loud", encoding="utf-8")
-    (path / "docs" / "guide.md").write_text("# guide", encoding="utf-8")
+    (path / "artifacts" / "guide.md").write_text("# guide", encoding="utf-8")
 
     findings = json.loads(run("doctor", "--root", root, "--json").out)[identifier]
     names = {name for name, _ in findings}
     assert "scratch-newer" in names
-    assert any(name == "unregistered" and text.startswith("docs/guide.md isn't registered") for name, text in findings)
+    assert any(name == "unregistered" and text.startswith("artifacts/guide.md isn't registered") for name, text in findings)
 
     text = run("doctor", "--root", root).out
     assert text.startswith(f"## {path.name}")

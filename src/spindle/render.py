@@ -9,7 +9,7 @@ from pathlib import Path
 
 from typing import Any
 
-from . import events, guide, metadata, summary, tasks, tree
+from . import decisions, events, guide, metadata, summary, tasks, tree
 from .limits import LIMITS
 from .store import (
     FINAL_STATES, ThreadError, atomic_text, is_final, namespace_of, parse_frontmatter, resolve_thread,
@@ -93,6 +93,8 @@ def _index_lines(thread: Path, *, artifact_limit: int | None, pointers: bool = T
     registered again shows once, with its newest registration."""
     newest: dict[tuple[str, str | None], tuple[dict[str, Any], str]] = {}
     for item, date in registrations(thread):
+        if item["registration"].get("kind") == "reading-guide":
+            continue  # written before orientation.md replaced the registered reading guide
         key = (item["registration"]["path"], item.get("pointer", "").split("@", 1)[0] or None)
         newest.pop(key, None)  # re-insert so order follows the newest registration
         newest[key] = (item, date)
@@ -100,46 +102,23 @@ def _index_lines(thread: Path, *, artifact_limit: int | None, pointers: bool = T
     carried = [item for item, _ in rows if item.get("pointer")]
     if not pointers:
         rows = [(item, date) for item, date in rows if not item.get("pointer")]
-    docs = [(item, date) for item, date in rows if item["registration"]["path"].startswith("docs/")]
-    artifacts = [(item, date) for item, date in rows if item["registration"]["path"].startswith("artifacts/")]
-    lines = ["## Docs — read these when…"]
-    if docs:
-        for payload, date in docs:
-            item = payload["registration"]
-            details = _entry_details(thread, payload, date, artifact=False)
-            lines += [
-                f"- {_name(payload)}{f' ({details})' if details else ''} — {item['purpose']}",
-                f"  *Read when:* {item['read-when']}",
-            ]
-    else:
-        lines.append("- None.")
-    lines += ["", "## Artifacts"]
+    artifacts = rows
+    lines = []
     shown = artifacts if artifact_limit is None else artifacts[-artifact_limit:]
     if shown:
         for payload, date in reversed(shown):
             item = payload["registration"]
             details = _entry_details(thread, payload, date, artifact=True)
             lines.append(f"- {_name(payload)}{f' ({details})' if details else ''} — {item['purpose']}")
+            if item.get("read-when"):
+                lines.append(f"  *Read when:* {item['read-when']}")
         hidden = len(artifacts) - len(shown)
         if hidden:
             lines.append(f"- … {hidden} more; see `{thread / 'index.md'}`")
     else:
         lines.append("- None.")
-    guides = [item for item in carried if item["registration"]["kind"] == "reading-guide"]
-    if guides and pointers:
-        lines += ["", "## Reading guides of merged subthreads"]
-        lines += [f"- {_name(item)}" + (f" — {item['registration']['purpose']}" if item["registration"].get("purpose") else "")
-                  for item in guides]
     if carried and not pointers:
-        by_kind = [item["registration"]["kind"] for item in carried]
-        counts = ", ".join(part for part in (
-            _plural(by_kind.count("doc"), "doc") if by_kind.count("doc") else "",
-            _plural(by_kind.count("artifact"), "artifact") if by_kind.count("artifact") else "",
-            _plural(by_kind.count("reading-guide"), "reading guide") if by_kind.count("reading-guide") else "",
-        ) if part)
-        if ", " in counts:
-            head, _, last = counts.rpartition(", ")
-            counts = f"{head} and {last}"
+        counts = _plural(len(carried), "artifact")
         verb = "remains" if len(carried) == 1 else "remain"
         lines += ["", f"*{counts} {verb} in merged subthreads; `{thread / 'index.md'}` lists them.*"]
     return lines
@@ -148,7 +127,7 @@ def _index_lines(thread: Path, *, artifact_limit: int | None, pointers: bool = T
 def index_text(thread: Path) -> str:
     checkpoint = events.state(thread).get("last-checkpoint", {})
     lines = [
-        f"# {metadata.title_or_name(thread)} — docs and artifacts",
+        f"# {metadata.title_or_name(thread)} — artifacts",
         f"<!-- generated at checkpoint {checkpoint.get('id', 'none')}, {events.timestamp()}; do not edit -->",
         "",
         *_index_lines(thread, artifact_limit=None),
@@ -238,7 +217,7 @@ def _children_rows(
 
 
 def _index_body(thread: Path) -> list[str]:
-    """The capped docs/artifacts summary embedded in the orientation page."""
+    """The capped artifacts summary embedded in the view page."""
     return _index_lines(thread, artifact_limit=LIMITS["artifact_index"], pointers=False)
 
 
@@ -435,11 +414,11 @@ def view(root: Path, thread: Path, *, deep: bool = False) -> str:
         task_rows = ["- None."]
 
     around = _related_rows(root, thread, cache)
-    reading_path = thread / guide.READING_GUIDE
-    if reading_path.is_file():
+    orientation_path = thread / guide.ORIENTATION
+    if orientation_path.is_file():
         # errors="replace": a stray non-UTF-8 byte shows as U+FFFD instead of failing the view.
-        text = reading_path.read_text(encoding="utf-8", errors="replace")
-        reading = ["# Reading guide", guide.strip_comments(text).strip(), ""]
+        text = orientation_path.read_text(encoding="utf-8", errors="replace")
+        reading = ["# Orientation", guide.strip_comments(text).strip(), ""]
     else:
         reading = []
     return "\n".join([
@@ -454,8 +433,9 @@ def view(root: Path, thread: Path, *, deep: bool = False) -> str:
         "# Subthreads", *_children_rows(children, identifier, deep=deep, unreadable=len(unreadable_children)), "",
         "# Who's working", *(claim_rows or ["- Nobody."]), "",
         "# Open tasks", *task_rows, "",
+        *decisions.view_line(thread),
         *reading,
-        "# Docs and artifacts", *_index_body(thread), "",
+        "# Artifacts", *_index_body(thread), "",
         "# Related threads", *(around or ["- None."]),
     ]).replace("\n\n\n", "\n\n") + "\n"
 

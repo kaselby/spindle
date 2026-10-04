@@ -57,18 +57,18 @@ def family(root, run, body, make_thread):
 
 @pytest.fixture
 def loaded(root, run, body, make_thread):
-    """The brief's merge scenario: 2 artifacts, 1 doc, 3 tasks in the child."""
+    """The brief's merge scenario: 3 artifacts (one with a read-when), 3 tasks in the child."""
     parent = make_thread("Parent thread")
     child = make_thread("Child thread", "--parent", parent)
     path = store.resolve_thread(root, child)
-    (path / "docs" / "guide.md").write_text("# how to work on this\n", encoding="utf-8")
+    (path / "artifacts" / "guide.md").write_text("# how to work on this\n", encoding="utf-8")
     (path / "artifacts" / "kept.csv").write_text("a,b\n1,2\n", encoding="utf-8")
     (path / "artifacts" / "left.csv").write_text("c,d\n3,4\n", encoding="utf-8")
-    assert run("register", child, "docs/guide.md", "--kind", "doc", "--purpose", "orientation",
+    assert run("register", child, "artifacts/guide.md", "--purpose", "orientation",
                "--read-when", "before touching the harness", "--root", root).code == 0
-    assert run("register", child, "artifacts/kept.csv", "--kind", "artifact",
+    assert run("register", child, "artifacts/kept.csv",
                "--purpose", "the numbers that matter", "--root", root).code == 0
-    assert run("register", child, "artifacts/left.csv", "--kind", "artifact",
+    assert run("register", child, "artifacts/left.csv",
                "--purpose", "intermediate output", "--root", root).code == 0
     for text in ("roll this one up", "leave this one", "and this one"):
         assert run("task", "add", child, text, "--root", root).code == 0
@@ -90,22 +90,22 @@ def test_merge_copies_points_rolls_up_and_commits_once(root, run, body, loaded):
     before = _log(child_path)
     commits = len(git(root, "log", "--oneline").splitlines())
 
-    result = run("merge", child, "--promote", "artifacts/kept.csv", "docs/guide.md",
+    result = run("merge", child, "--promote", "artifacts/kept.csv", "artifacts/guide.md",
                  "--tasks", loaded["tasks"][0], "--body", body(_merge_text(child)), "--root", root, "--json")
     assert result.code == 0, result.err
     value = json.loads(result.out)
 
     # Files landed at the same relative paths, with the same bytes.
-    assert (parent_path / "docs" / "guide.md").read_text() == "# how to work on this\n"
+    assert (parent_path / "artifacts" / "guide.md").read_text() == "# how to work on this\n"
     assert (parent_path / "artifacts" / "kept.csv").read_text() == "a,b\n1,2\n"
     assert not (parent_path / "artifacts" / "left.csv").exists()
 
     registers = [e for e in _log(parent_path) if e["type"] == "register"]
     copied = {e["payload"]["registration"]["path"]: e["payload"] for e in registers
               if e["payload"].get("from")}
-    assert set(copied) == {"docs/guide.md", "artifacts/kept.csv"}
+    assert set(copied) == {"artifacts/guide.md", "artifacts/kept.csv"}
     assert all(payload["from"] == f"{child}@c0001" for payload in copied.values())
-    assert copied["docs/guide.md"]["registration"]["read-when"] == "before touching the harness"
+    assert copied["artifacts/guide.md"]["registration"]["read-when"] == "before touching the harness"
     pointers = [e["payload"] for e in registers if e["payload"].get("pointer")]
     assert [p["pointer"] for p in pointers] == [f"{child}:artifacts/left.csv@c0001"]
 
@@ -123,7 +123,7 @@ def test_merge_copies_points_rolls_up_and_commits_once(root, run, body, loaded):
     assert len(merged) == 1
     assert merged[0]["payload"] == {
         "child": child, "checkpoint": "c0001",
-        "promoted": ["artifacts/kept.csv", "docs/guide.md"],
+        "promoted": ["artifacts/kept.csv", "artifacts/guide.md"],
         "pointers": ["artifacts/left.csv"],
         "tasks": [added[0]["payload"]["task"]], "forced": False,
     }
@@ -140,9 +140,9 @@ def test_merge_copies_points_rolls_up_and_commits_once(root, run, body, loaded):
     from_section = rendered.split(f"## From {child}\n")[1].split("\n## ")[0]
     added_id = added[0]["payload"]["task"]
     assert f'- Final checkpoint: c0001, "Child synthesis."' in from_section
-    assert f"- Promoted to {parent}: artifacts/kept.csv, docs/guide.md" in from_section
+    assert f"- Promoted to {parent}: artifacts/kept.csv, artifacts/guide.md" in from_section
     assert f'- Tasks moved to {parent}: "roll this one up" (now {added_id})' in from_section
-    assert f"- Left in {child}: 0 docs, 1 artifact, 2 open tasks" in from_section
+    assert f"- Left in {child}: 1 artifact, 2 open tasks" in from_section
     status = rendered.split("## Status\n")[1].strip()
     assert status == "The parent now holds the child's result."
     assert value["checkpoint"] == "c0002"
@@ -171,19 +171,19 @@ def test_merge_copies_points_rolls_up_and_commits_once(root, run, body, loaded):
 
 def test_merge_index_renders_pointers_as_arrows(root, run, body, loaded):
     child = loaded["child"]
-    assert run("merge", child, "--promote", "docs/guide.md", "--body", body(_merge_text(child)),
+    assert run("merge", child, "--promote", "artifacts/guide.md", "--body", body(_merge_text(child)),
                "--root", root).code == 0
     index = (loaded["parent_path"] / "index.md").read_text(encoding="utf-8")
     assert f"- → **{child}:artifacts/left.csv** — intermediate output" in index
-    assert "- **docs/guide.md** — orientation" in index
+    assert "- **artifacts/guide.md** (" in index and ") — orientation\n  *Read when:* before touching the harness" in index
 
 
 def test_the_view_counts_pointers_instead_of_listing_them(root, run, body, loaded):
     parent, child = loaded["parent"], loaded["child"]
-    assert run("merge", child, "--promote", "docs/guide.md", "--body", body(_merge_text(child)),
+    assert run("merge", child, "--promote", "artifacts/guide.md", "--body", body(_merge_text(child)),
                "--root", root).code == 0
     view = run("view", parent, "--root", root).out
-    assert "- **docs/guide.md** — orientation" in view  # promoted: the parent's own
+    assert "- **artifacts/guide.md** (" in view and ") — orientation" in view  # promoted: the parent's own
     assert f"{child}:artifacts" not in view
     index_path = loaded["parent_path"] / "index.md"
     assert f"*2 artifacts remain in merged subthreads; `{index_path}` lists them.*" in view
@@ -242,14 +242,14 @@ def test_merge_refuses_an_unregistered_promote_path(root, run, loaded):
 
 
 def test_merge_refuses_a_promote_path_the_parent_already_has(root, run, loaded):
-    (loaded["parent_path"] / "docs" / "guide.md").write_text("mine\n", encoding="utf-8")
-    result = run("merge", loaded["child"], "--promote", "docs/guide.md", "--root", root)
+    (loaded["parent_path"] / "artifacts" / "guide.md").write_text("mine\n", encoding="utf-8")
+    result = run("merge", loaded["child"], "--promote", "artifacts/guide.md", "--root", root)
     assert result.code == lifecycle.CONFLICT
-    assert "docs/guide.md" in result.err
+    assert "artifacts/guide.md" in result.err
     # --force does not override a conflict.
-    forced = run("merge", loaded["child"], "--promote", "docs/guide.md", "--force", "--root", root)
+    forced = run("merge", loaded["child"], "--promote", "artifacts/guide.md", "--force", "--root", root)
     assert forced.code == lifecycle.CONFLICT
-    assert (loaded["parent_path"] / "docs" / "guide.md").read_text() == "mine\n"
+    assert (loaded["parent_path"] / "artifacts" / "guide.md").read_text() == "mine\n"
 
 
 def test_merge_refuses_an_unknown_task_id(root, run, loaded):
@@ -269,13 +269,13 @@ def test_merge_rolls_back_copied_files_when_an_append_fails(root, run, body, loa
 
     monkeypatch.setattr(events, "append", explode)
     with pytest.raises(RuntimeError):
-        run("merge", loaded["child"], "--promote", "docs/guide.md", "artifacts/kept.csv",
+        run("merge", loaded["child"], "--promote", "artifacts/guide.md", "artifacts/kept.csv",
             "--body", body(_merge_text(loaded["child"])), "--root", root)
     monkeypatch.undo()
 
-    assert not (parent_path / "docs" / "guide.md").exists()
+    assert not (parent_path / "artifacts" / "guide.md").exists()
     assert not (parent_path / "artifacts" / "kept.csv").exists()
-    assert (parent_path / "docs").is_dir() and (parent_path / "artifacts").is_dir()
+    assert (parent_path / "artifacts").is_dir()  # the layout folder itself stays
     assert events.tip(parent_path) == tip
     assert events.tip(loaded["child_path"]) == child_tip
     assert git(root, "rev-parse", "HEAD").strip() == head
@@ -285,19 +285,19 @@ def test_merge_rolls_back_copied_files_when_an_append_fails(root, run, body, loa
 def test_merge_without_body_prints_the_template(root, run, loaded):
     parent, child = loaded["parent"], loaded["child"]
     head = git(root, "rev-parse", "HEAD").strip()
-    result = run("merge", child, "--promote", "docs/guide.md", "--tasks", loaded["tasks"][0], "--root", root)
+    result = run("merge", child, "--promote", "artifacts/guide.md", "--tasks", loaded["tasks"][0], "--root", root)
     assert result.code == 2 and result.err == ""
     template = result.out
-    assert f"thread merge {child} --body <file> --promote docs/guide.md --tasks {loaded['tasks'][0]}" in template
+    assert f"thread merge {child} --body <file> --promote artifacts/guide.md --tasks {loaded['tasks'][0]}" in template
     assert "completion-and-merging.md" in template
     # The headline is suggested and is the only line before ## From.
     before = store.strip_comments(template).split(f"## From {child}")[0]
     assert [line for line in before.splitlines() if line.strip()] == [f"Merged {child}: Child synthesis."]
     # The facts are visible while writing.
     assert '- Final checkpoint: c0001, "Child synthesis."' in template
-    assert f"- Promoted to {parent}: docs/guide.md" in template
+    assert f"- Promoted to {parent}: artifacts/guide.md" in template
     assert f'- Tasks moved to {parent}: "roll this one up"' in template
-    assert f"- Left in {child}: 0 docs, 2 artifacts, 2 open tasks" in template
+    assert f"- Left in {child}: 2 artifacts, 2 open tasks" in template
     assert "How does merging this subthread change the parent's state?" in template
     assert "Write it against the parent's origin." in template
     assert "## Inherited" in template
@@ -742,28 +742,45 @@ def test_claim_and_release_do_not_block_a_merge(root, run, body, family):
     assert result.code == 0, result.err
 
 
-def test_merge_carries_the_childs_reading_guide_as_a_pointer(root, run, body, loaded):
+def test_merge_leaves_the_childs_orientation_behind(root, run, body, loaded):
+    """orientation.md is never registered, so merge neither points at it nor copies it."""
     parent, child = loaded["parent"], loaded["child"]
-    (loaded["child_path"] / "reading-guide.md").write_text("1. `docs/guide.md`\n", encoding="utf-8")
-    assert run("register", child, "reading-guide.md", "--kind", "reading-guide",
-               "--purpose", "start here", "--root", root).code == 0
-    _cp(run, root, body, child, CHILD_BODY)
-    assert run("merge", child, "--promote", "docs/guide.md", "--body", body(_merge_text(child)),
+    (loaded["child_path"] / "orientation.md").write_text("1. `artifacts/guide.md`\n", encoding="utf-8")
+    refused = run("merge", child, "--promote", "orientation.md", "--root", root)
+    assert refused.code == lifecycle.NOT_REGISTERED
+    assert run("merge", child, "--promote", "artifacts/guide.md", "--body", body(_merge_text(child)),
                "--root", root).code == 0
+    assert not (loaded["parent_path"] / "orientation.md").exists()
     view = run("view", parent, "--root", root).out
+    assert "# Orientation" not in view
     index_path = loaded["parent_path"] / "index.md"
-    assert f"*2 artifacts and 1 reading guide remain in merged subthreads; `{index_path}` lists them.*" in view
+    assert f"*2 artifacts remain in merged subthreads; `{index_path}` lists them.*" in view
     index = index_path.read_text(encoding="utf-8")
-    assert f"## Reading guides of merged subthreads\n- → **{child}:reading-guide.md** — start here" in index
-    assert not (loaded["parent_path"] / "reading-guide.md").exists()
+    assert "orientation.md" not in index and "Reading guide" not in index
 
 
-def test_merge_can_promote_the_reading_guide_when_the_parent_has_none(root, run, body, loaded):
-    parent, child = loaded["parent"], loaded["child"]
-    (loaded["child_path"] / "reading-guide.md").write_text("1. `docs/guide.md`\n", encoding="utf-8")
-    assert run("register", child, "reading-guide.md", "--kind", "reading-guide", "--root", root).code == 0
+def test_merge_with_old_doc_and_reading_guide_registrations(root, run, body, loaded):
+    """A child logged before 10-04: its old reading guide is ignored, its old doc
+    can't be promoted but stays behind as a pointer, and nothing copied into the
+    parent carries a `kind`."""
+    parent, child, path = loaded["parent"], loaded["child"], loaded["child_path"]
+    (path / "docs").mkdir()
+    (path / "docs" / "how.md").write_text("# how", encoding="utf-8")
+    old = {"session": "s1", "agent": "a1"}  # the test session, as if it had written them itself
+    events.append(path, "register", {"registration": {
+        "path": "docs/how.md", "kind": "doc", "purpose": "how it works", "read-when": "before changing it",
+    }, "checkpoint": "pending"}, old)
+    events.append(path, "register", {"registration": {
+        "path": "reading-guide.md", "kind": "reading-guide",
+    }, "checkpoint": "pending"}, old)
     _cp(run, root, body, child, CHILD_BODY)
-    assert run("merge", child, "--promote", "reading-guide.md", "docs/guide.md",
-               "--body", body(_merge_text(child)), "--root", root).code == 0
-    assert (loaded["parent_path"] / "reading-guide.md").read_text() == "1. `docs/guide.md`\n"
-    assert "# Reading guide\n1. `docs/guide.md`" in run("view", parent, "--root", root).out
+
+    refused = run("merge", child, "--promote", "docs/how.md", "--root", root)
+    assert refused.code == lifecycle.NOT_REGISTERED and "before docs were retired" in refused.err
+    assert run("merge", child, "--promote", "artifacts/guide.md", "--body", body(_merge_text(child)),
+               "--root", root).code == 0
+    copied = [event["payload"] for event in _log(loaded["parent_path"]) if event["type"] == "register"]
+    assert all("kind" not in payload["registration"] for payload in copied)
+    pointers = [payload for payload in copied if payload.get("pointer")]
+    assert {payload["registration"]["path"] for payload in pointers} == {"artifacts/kept.csv", "artifacts/left.csv", "docs/how.md"}
+    assert not (loaded["parent_path"] / "docs").exists()
