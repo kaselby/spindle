@@ -341,8 +341,7 @@ def merge(
         for relative in pointers:
             _register(parent, registered[relative], by, pointer=f"{child_id}:{relative}@{child_cid}")
         rolled = [tasks.add(parent, task["text"], by, from_thread=child_id)["id"] for task in rolling]
-        carried = decisions.carry(parent, child, by)
-        copied.extend(item["path"] for item in carried)
+        carried = decisions.carry(parent, child, by, copied)
         for task in tasks.read(parent):
             if task.get("promoted") == child_id and not task.get("done"):
                 tasks.close(parent, task["id"], by)

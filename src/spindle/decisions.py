@@ -171,20 +171,24 @@ def decide(
     return {**payload, "event": event["id"], "path": str(thread / relative)}
 
 
-def carry(parent: Path, child: Path, by: dict[str, str]) -> list[dict[str, Any]]:
+def carry(parent: Path, child: Path, by: dict[str, str], created: list[Path]) -> list[dict[str, Any]]:
     """At merge, each live decision of the child becomes one of the parent's: the
     parent's next id, the same title, status and text, and `from` naming the
-    child's id. Superseded ones stay behind. Runs inside merge, which has already
-    checked that both threads are current, so there is no CAS here. Returns one
-    {"from", "decision", "path"} per decision carried, in order."""
+    child's id. Superseded ones stay behind. Every source file is read before
+    anything is written; each file written is added to ``created`` at once, so
+    merge can remove it if anything fails. Appends use CAS, so a decision
+    recorded on the parent meanwhile fails the merge instead of sharing an id.
+    Returns one {"from", "decision"} per decision carried, in order."""
     child_id = child.name.split("-", 1)[0]
+    rising = [(record, parse_frontmatter((child / record["file"]).read_text(encoding="utf-8"))[1])
+              for record in live(child)]
+    tip = events.tip(parent)
     number = max((int(record["id"][1:]) for record in records(parent)), default=0)
     carried = []
-    for record in live(child):
+    for record, body in rising:
         number += 1
         identifier = f"D{number:03d}"
         source = f"{child_id}:{record['id']}"
-        _, body = parse_frontmatter((child / record["file"]).read_text(encoding="utf-8"))
         relative = f"decisions/{identifier}-{slugify(record['title'])}.md"
         front = {
             "id": identifier, "title": record["title"], "status": record["status"],
@@ -192,13 +196,17 @@ def carry(parent: Path, child: Path, by: dict[str, str]) -> list[dict[str, Any]]
         }
         path = parent / relative
         path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("x", encoding="utf-8") as handle:
-            handle.write(markdown(front, body))
-        carried.append({"from": record["id"], "decision": identifier, "path": path})
-        events.append(parent, "decided", {
+        try:
+            with path.open("x", encoding="utf-8") as handle:
+                created.append(path)
+                handle.write(markdown(front, body))
+        except FileExistsError:
+            raise ThreadError(_RACE.format(thread=parent.name), code=4) from None
+        tip = events.append(parent, "decided", {
             "decision": identifier, "title": record["title"], "status": record["status"],
             "file": relative, "from": source,
-        }, by)
+        }, by, expected_tip=tip)["id"]
+        carried.append({"from": record["id"], "decision": identifier})
     return carried
 
 
