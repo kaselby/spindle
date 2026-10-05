@@ -139,11 +139,12 @@ def _count(number: int, noun: str) -> str:
 
 def merge_facts(child_id: str, parent_id: str, child_checkpoint: str, child_headline: str,
                 promoted: list[str], moved: list[tuple[str, str | None]],
-                left_artifacts: int, left_tasks: int) -> str:
+                carried: list[tuple[str, str, str | None]], left_artifacts: int, left_tasks: int) -> str:
     """The block the tool writes under the author's narrative in `## From <child>`.
 
-    ``moved`` is (task text, its new id on the parent); the id is None in the
-    template, before the merge has added it."""
+    ``moved`` is (task text, its new id on the parent) and ``carried`` is (the
+    child's decision id, its title, its new id on the parent); the new ids are None in the
+    template, before the merge has added them."""
     tasks = ", ".join(
         f"\"{_clip(text, 60)}\"" + (f" (now {new_id})" if new_id else "") for text, new_id in moved
     ) or "none"
@@ -152,6 +153,9 @@ def merge_facts(child_id: str, parent_id: str, child_checkpoint: str, child_head
         f"- Final checkpoint: {child_checkpoint}, \"{child_headline}\"",
         f"- Promoted to {parent_id}: {', '.join(promoted) or 'none'}",
         f"- Tasks moved to {parent_id}: {tasks}",
+        f"- Decisions carried to {parent_id}: " + (", ".join(
+            f"{old} \"{_clip(title, 60)}\"" + (f" (now {new})" if new else "") for old, title, new in carried
+        ) or "none"),
         f"- Left in {child_id}: {_count(left_artifacts, 'artifact')}, "
         f"{_count(left_tasks, 'open task')} (`thread view {child_id}`)",
     ]) + "\n"

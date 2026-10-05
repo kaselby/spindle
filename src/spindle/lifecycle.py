@@ -16,7 +16,7 @@ import subprocess
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from . import checkpoint, events, gitops, guide, metadata, render, store, summary, tasks
+from . import checkpoint, decisions, events, gitops, guide, metadata, render, store, summary, tasks
 from .store import (
     thread_home, namespace_of, is_active, is_final, iter_threads,
     NeedsInput, ThreadError, atomic_text, markdown, parse_frontmatter, resolve_thread, root_of,
@@ -198,11 +198,9 @@ def _registered(thread: Path) -> dict[str, dict[str, Any]]:
     Pointers are other threads' files, so they are not promotable."""
     found: dict[str, dict[str, Any]] = {}
     for payload, _ in render.registrations(thread):
-        if payload.get("pointer") or payload["registration"].get("kind") == "reading-guide":
+        if payload.get("pointer"):
             continue
-        registration = dict(payload["registration"])
-        registration.pop("kind", None)  # registrations written before 10-04 carried a kind
-        found[registration["path"]] = registration
+        found[payload["registration"]["path"]] = dict(payload["registration"])
     return found
 
 
@@ -277,12 +275,6 @@ def merge(
                 f"Registered: {known}. (`thread register {child_id} <path> ...` registers a file.)",
                 code=NOT_REGISTERED,
             )
-        if not relative.startswith("artifacts/"):
-            raise ThreadError(
-                f"{relative} was registered as a doc, before docs were retired, so it can't be copied into "
-                f"{parent_id}. It stays in {child_id}, and {parent_id}'s index points to it.",
-                code=NOT_REGISTERED,
-            )
         if relative not in wanted:
             wanted.append(relative)
     taken = set(_registered(parent))
@@ -315,9 +307,12 @@ def merge(
     left_tasks = sum(1 for task in board if not task.get("done") and task.get("id") not in rolling_ids)
     left_artifacts = len(pointers)
 
-    def facts(moved: list[tuple[str, str | None]]) -> str:
+    rising = decisions.live(child)
+
+    def facts(moved: list[tuple[str, str | None]], carried: list[str | None]) -> str:
         return guide.merge_facts(
             child_id, parent_id, child_cid, _headline(child), wanted, moved,
+            [(record["id"], record["title"], new_id) for record, new_id in zip(rising, carried)],
             left_artifacts, left_tasks,
         )
 
@@ -327,7 +322,7 @@ def merge(
         raise NeedsInput(guide.merge_template(
             child_id, parent_id, parent_cid,
             _merge_command(child_id, promote, task_ids, all_tasks, force),
-            _headline(child), facts([(task["text"], None) for task in rolling]),
+            _headline(child), facts([(task["text"], None) for task in rolling], [None] * len(rising)),
             [item["text"] if isinstance(item, dict) else str(item) for item in inherited],
         ))
     body_text = body.read_text(encoding="utf-8")
@@ -346,6 +341,7 @@ def merge(
         for relative in pointers:
             _register(parent, registered[relative], by, pointer=f"{child_id}:{relative}@{child_cid}")
         rolled = [tasks.add(parent, task["text"], by, from_thread=child_id)["id"] for task in rolling]
+        carried = decisions.carry(parent, child, by, copied)
         for task in tasks.read(parent):
             if task.get("promoted") == child_id and not task.get("done"):
                 tasks.close(parent, task["id"], by)
@@ -359,9 +355,11 @@ def merge(
 
         events.append(parent, "child-merged", {
             "child": child_id, "checkpoint": child_cid, "promoted": wanted,
-            "pointers": pointers, "tasks": rolled, "forced": bool(grandchildren),
+            "pointers": pointers, "tasks": rolled,
+            "decisions": [item["decision"] for item in carried], "forced": bool(grandchildren),
         }, by)
-        block = facts([(task["text"], new_id) for task, new_id in zip(rolling, rolled)])
+        block = facts([(task["text"], new_id) for task, new_id in zip(rolling, rolled)],
+                      [item["decision"] for item in carried])
         written, _ = checkpoint.create(
             root, parent, None, by, at=None, forced_by="merge", body_text=body_text, commit=False,
             merged=(child_id, block),
@@ -385,6 +383,7 @@ def merge(
         "child": child_id, "parent": parent_id, "checkpoint": written,
         "child-checkpoint": child_cid, "parent-previous": parent_cid,
         "promoted": wanted, "pointers": pointers, "tasks": rolled,
+        "decisions": [item["decision"] for item in carried],
         "forced": bool(grandchildren), "archived": str(archived), "commit": sha,
     }
 

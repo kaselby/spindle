@@ -4,7 +4,7 @@
   "title": "checkpoints/<id>.md — YAML frontmatter",
   "$comment": "Frontmatter of a checkpoint file; the body is markdown. A checkpoint is a synthesis written against the origin: the latest one is where the thread stands, and all of them in order are its history. The body is an outline whose first line is the headline, then '## Status' and optionally '## Inherited' (at most 3 one-line items, each tagged with the checkpoint it came from). Size limits on the body are checked by the tool, since JSON Schema can't see markdown; `inherited` is mirrored here so it can be checked and rendered without parsing the body. A checkpoint can't record the hash of its own commit; `git log --grep 'checkpoint <id>@<cid>'` finds it.",
   "type": "object",
-  "required": ["id", "thread", "at", "ts", "by", "headline"],
+  "required": ["id", "thread", "at", "ts", "by", "headline", "metadata"],
   "additionalProperties": false,
   "properties": {
     "id": {
@@ -40,7 +40,7 @@
       }
     },
     "registers": {
-      "description": "Docs/artifacts registered in this checkpoint.",
+      "description": "Artifacts registered in this checkpoint.",
       "type": "array",
       "items": { "$ref": "common.schema.json#/$defs/registration" }
     },
@@ -50,7 +50,7 @@
       "enum": ["merge", "pivot", "complete", "drop"]
     },
     "metadata": {
-      "description": "thread.yml as it stood when the checkpoint was written: the baseline the view diffs against for its 'thread.yml since the last checkpoint' line. Absent in checkpoints written before 09-25.",
+      "description": "thread.yml as it stood when the checkpoint was written: the baseline the view diffs against for its 'thread.yml since the last checkpoint' line.",
       "$ref": "thread.schema.json"
     },
     "project-head": {

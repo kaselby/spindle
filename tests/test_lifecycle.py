@@ -12,7 +12,7 @@ import yaml
 
 from conftest import git
 
-from spindle import events, lifecycle, metadata, store, summary
+from spindle import decisions, events, lifecycle, metadata, store, summary
 
 PARENT_BODY = "Parent synthesis.\n\n## Status\nThe parent holds.\n"
 CHILD_BODY = "Child synthesis.\n\nA second outline line.\n\n## Status\nThe child is done.\n"
@@ -125,7 +125,7 @@ def test_merge_copies_points_rolls_up_and_commits_once(root, run, body, loaded):
         "child": child, "checkpoint": "c0001",
         "promoted": ["artifacts/kept.csv", "artifacts/guide.md"],
         "pointers": ["artifacts/left.csv"],
-        "tasks": [added[0]["payload"]["task"]], "forced": False,
+        "tasks": [added[0]["payload"]["task"]], "decisions": [], "forced": False,
     }
 
     # The forced checkpoint: the author's headline, narrative and Status, with
@@ -167,6 +167,50 @@ def test_merge_copies_points_rolls_up_and_commits_once(root, run, body, loaded):
     assert any(f"{child}" in name for name in touched)
     assert all(parent in name or child in name for name in touched)
 
+
+
+def test_merge_carries_live_decisions_up(root, run, body, make_thread):
+    """A merged subthread's live decisions become the parent's, numbered after the
+    parent's own; one the child superseded stays behind."""
+    parent = make_thread("Parent thread")
+    child = make_thread("Child thread", "--parent", parent)
+    text = "## Decision\nUse A.\n\n## Why\nIt fits.\n"
+    assert run("decide", parent, "Parent's own", body(text), "--root", root).code == 0
+    assert run("decide", child, "First try", body(text), "--root", root).code == 0
+    assert run("decide", child, "Second try", body(text), "--supersedes", "D001", "--settled",
+               "--root", root).code == 0
+    assert run("decide", child, "Separate call", body(text), "--root", root).code == 0
+    # Backdate the child's decisions, as if they were made long before the merge.
+    log = store.resolve_thread(root, child) / "log.jsonl"
+    lines = [json.loads(line) for line in log.read_text().splitlines()]
+    for event in lines:
+        if event["type"] == "decided":
+            event["ts"] = "2026-01-02T03:04:05Z"
+    log.write_text("".join(json.dumps(event, separators=(",", ":")) + "\n" for event in lines))
+    _cp(run, root, body, parent, PARENT_BODY)
+    _cp(run, root, body, child, CHILD_BODY)
+
+    template = run("merge", child, "--root", root)
+    assert f'- Decisions carried to {parent}: D002 "Second try", D003 "Separate call"' in template.out
+    result = run("merge", child, "--body", body(_merge_text(child)), "--root", root, "--json")
+    assert result.code == 0, result.err
+    assert json.loads(result.out)["decisions"] == ["D002", "D003"]
+
+    listed = run("decisions", parent, "--root", root).out
+    assert "D001 [working] Parent's own" in listed
+    assert "D002 [settled] Second try" in listed and f"from {child} D002" in listed
+    assert "D003 [working] Separate call" in listed and f"from {child} D003" in listed
+    assert "First try" not in listed
+    # Carried decisions keep the date they were first made, not the merge's.
+    assert f"D002 [settled] Second try (2026-01-02, from {child} D002)" in listed
+    parent_dates = {r["id"]: r["ts"] for r in decisions.records(store.resolve_thread(root, parent))}
+    assert parent_dates["D002"] == parent_dates["D003"] == "2026-01-02T03:04:05Z"
+    assert parent_dates["D001"] != "2026-01-02T03:04:05Z"
+    shown = run("decisions", parent, "D002", "--root", root).out
+    assert "Use A." in shown and f"from: {child}:D002" in shown
+    checkpoint_text = (store.resolve_thread(root, parent) / "checkpoints" / "c0002.md").read_text()
+    assert (f'- Decisions carried to {parent}: D002 "Second try" (now D002), '
+            f'D003 "Separate call" (now D003)') in checkpoint_text
 
 
 def test_merge_index_renders_pointers_as_arrows(root, run, body, loaded):
@@ -758,29 +802,3 @@ def test_merge_leaves_the_childs_orientation_behind(root, run, body, loaded):
     index = index_path.read_text(encoding="utf-8")
     assert "orientation.md" not in index and "Reading guide" not in index
 
-
-def test_merge_with_old_doc_and_reading_guide_registrations(root, run, body, loaded):
-    """A child logged before 10-04: its old reading guide is ignored, its old doc
-    can't be promoted but stays behind as a pointer, and nothing copied into the
-    parent carries a `kind`."""
-    parent, child, path = loaded["parent"], loaded["child"], loaded["child_path"]
-    (path / "docs").mkdir()
-    (path / "docs" / "how.md").write_text("# how", encoding="utf-8")
-    old = {"session": "s1", "agent": "a1"}  # the test session, as if it had written them itself
-    events.append(path, "register", {"registration": {
-        "path": "docs/how.md", "kind": "doc", "purpose": "how it works", "read-when": "before changing it",
-    }, "checkpoint": "pending"}, old)
-    events.append(path, "register", {"registration": {
-        "path": "reading-guide.md", "kind": "reading-guide",
-    }, "checkpoint": "pending"}, old)
-    _cp(run, root, body, child, CHILD_BODY)
-
-    refused = run("merge", child, "--promote", "docs/how.md", "--root", root)
-    assert refused.code == lifecycle.NOT_REGISTERED and "before docs were retired" in refused.err
-    assert run("merge", child, "--promote", "artifacts/guide.md", "--body", body(_merge_text(child)),
-               "--root", root).code == 0
-    copied = [event["payload"] for event in _log(loaded["parent_path"]) if event["type"] == "register"]
-    assert all("kind" not in payload["registration"] for payload in copied)
-    pointers = [payload for payload in copied if payload.get("pointer")]
-    assert {payload["registration"]["path"] for payload in pointers} == {"artifacts/kept.csv", "artifacts/left.csv", "docs/how.md"}
-    assert not (loaded["parent_path"] / "docs").exists()

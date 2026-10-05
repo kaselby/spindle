@@ -116,7 +116,7 @@ def render(root: Path, *, now: datetime | None = None) -> str:
             f"{'are' if unreadable != 1 else 'is'} left out; `thread doctor` says which."
         )]
     if active or inactive:
-        out.append("`thread view <id>` shows a thread's orientation page.")
+        out.append("`thread view <id>` shows a thread's view page: where it stands and where to look.")
     return "\n".join(out).rstrip() + "\n"
 
 

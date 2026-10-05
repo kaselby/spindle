@@ -58,7 +58,7 @@ so the change itself is on record. If the work becomes something else, it
 becomes a new thread with its own origin.
 
 **Record freely, show carefully.** The log takes anything, cheaply, and is never
-shown on the orientation page. That's why recording freely is safe. What *is*
+shown on the view page. That's why recording freely is safe. What *is*
 shown is either written deliberately (origin, checkpoint, orientation) or
 generated with a limit on its size.
 

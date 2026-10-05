@@ -26,7 +26,7 @@ checkpoint.
 
 If the question you're answering now isn't the one the thread started with,
 start a new thread for it. Write a final checkpoint on the old one saying where
-it stood, then complete or drop it. Create the new thread with an origin that
+it stood, then complete or drop it (a subthread merges or drops). Create the new thread with an origin that
 stands on its own and names the old thread's id, and link the two with
 `thread link <new> continues <old>`. Move over any open tasks that still apply.
 

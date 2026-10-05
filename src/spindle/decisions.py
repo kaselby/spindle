@@ -8,7 +8,9 @@ stays, marked `superseded-by`. Which decisions are live is computed from the
 log; the frontmatter mark is for anyone reading the file directly.
 
 Decisions are looked up with `thread decisions`; the view page only says how
-many there are.
+many there are. When a subthread merges, its live decisions percolate up: each
+becomes one of the parent's (`carry`), so supersede, look-up and the next merge
+up all work the same way.
 """
 
 from __future__ import annotations
@@ -26,6 +28,8 @@ STATUSES = ("working", "settled")
 REQUIRED = ("Decision", "Why")
 OPTIONAL = ("Alternatives",)
 _ID = re.compile(r"^D\d{3,}$")
+_RACE = ("another session recorded a decision in {thread} while this command ran. "
+         "Nothing was written; run the command again.")
 
 TEMPLATE = """\
 ## Decision
@@ -52,6 +56,11 @@ def template(command: str) -> str:
 def _sections(body: str) -> dict[str, str]:
     lines = strip_comments(body).splitlines()
     headings = [(i, line[3:].strip()) for i, line in enumerate(lines) if line.startswith("## ")]
+    if "\n".join(lines[:headings[0][0] if headings else len(lines)]).strip():
+        raise ThreadError(
+            "a decision has only `## Decision`, `## Why` and optionally `## Alternatives`; "
+            "move the text above the first heading into one of them."
+        )
     found: dict[str, str] = {}
     for position, (start, name) in enumerate(headings):
         end = headings[position + 1][0] if position + 1 < len(headings) else len(lines)
@@ -78,16 +87,19 @@ def _check_body(body: str) -> str:
 
 def records(thread: Path) -> list[dict[str, Any]]:
     """Every decision in the thread, oldest first, from the log. Each record
-    has id, title, status, ts, by, file, supersedes and superseded-by."""
+    has id, title, status, ts, by, file, supersedes, superseded-by, and from
+    (`<child>:<id>` for a decision carried up from a merged subthread)."""
     found: dict[str, dict[str, Any]] = {}
     for event in events.read_events(thread):
         if event["type"] != "decided":
             continue
         payload = event["payload"]
         record = {
+            # A decision carried up at merge keeps the date it was first made.
             "id": payload["decision"], "title": payload["title"], "status": payload["status"],
-            "ts": event["ts"], "by": event["by"], "file": payload.get("file"),
+            "ts": payload.get("created") or event["ts"], "by": event["by"], "file": payload.get("file"),
             "supersedes": payload.get("supersedes"), "superseded-by": None,
+            "from": payload.get("from"),
         }
         found[record["id"]] = record
         if record["supersedes"] in found:
@@ -109,6 +121,9 @@ def decide(
             "Detail belongs in the body."
         )
     body = _check_body(body_text)
+    # The id is the highest so far plus one. expected_tip makes the append fail if
+    # another session recorded something meanwhile, so two decisions can't share an id.
+    tip = events.tip(thread)
     existing = records(thread)
     if supersedes is not None:
         supersedes = supersedes.upper()
@@ -133,24 +148,74 @@ def decide(
     }
     if supersedes:
         front["supersedes"] = supersedes
-    atomic_text(thread / relative, markdown(front, body))
+    path = thread / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with path.open("x", encoding="utf-8") as handle:
+            handle.write(markdown(front, body))
+    except FileExistsError:
+        raise ThreadError(_RACE.format(thread=thread.name), code=4) from None
+    payload: dict[str, Any] = {"decision": identifier, "title": title, "status": status, "file": relative}
+    if supersedes:
+        payload["supersedes"] = supersedes
+    try:
+        event = events.append(thread, "decided", payload, by, expected_tip=tip)
+    except ThreadError:
+        path.unlink()
+        raise
     if supersedes:
         old_file = thread / (old["file"] or "")
         if old["file"] and old_file.is_file():
             old_front, old_body = parse_frontmatter(old_file.read_text(encoding="utf-8"))
             old_front["superseded-by"] = identifier
             atomic_text(old_file, markdown(old_front, old_body))
-    payload: dict[str, Any] = {"decision": identifier, "title": title, "status": status, "file": relative}
-    if supersedes:
-        payload["supersedes"] = supersedes
-    event = events.append(thread, "decided", payload, by)
     return {**payload, "event": event["id"], "path": str(thread / relative)}
+
+
+def carry(parent: Path, child: Path, by: dict[str, str], created: list[Path]) -> list[dict[str, Any]]:
+    """At merge, each live decision of the child becomes one of the parent's: the
+    parent's next id, the same title, status and text, and `from` naming the
+    child's id. Superseded ones stay behind. Every source file is read before
+    anything is written; each file written is added to ``created`` at once, so
+    merge can remove it if anything fails. Appends use CAS, so a decision
+    recorded on the parent meanwhile fails the merge instead of sharing an id.
+    Returns one {"from", "decision"} per decision carried, in order."""
+    child_id = child.name.split("-", 1)[0]
+    rising = [(record, parse_frontmatter((child / record["file"]).read_text(encoding="utf-8"))[1])
+              for record in live(child)]
+    tip = events.tip(parent)
+    number = max((int(record["id"][1:]) for record in records(parent)), default=0)
+    carried = []
+    for record, body in rising:
+        number += 1
+        identifier = f"D{number:03d}"
+        source = f"{child_id}:{record['id']}"
+        relative = f"decisions/{identifier}-{slugify(record['title'])}.md"
+        front = {
+            "id": identifier, "title": record["title"], "status": record["status"],
+            "created": record["ts"], "by": by, "from": source,
+        }
+        path = parent / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with path.open("x", encoding="utf-8") as handle:
+                created.append(path)
+                handle.write(markdown(front, body))
+        except FileExistsError:
+            raise ThreadError(_RACE.format(thread=parent.name), code=4) from None
+        tip = events.append(parent, "decided", {
+            "decision": identifier, "title": record["title"], "status": record["status"],
+            "file": relative, "from": source, "created": record["ts"],
+        }, by, expected_tip=tip)["id"]
+        carried.append({"from": record["id"], "decision": identifier})
+    return carried
 
 
 def _line(record: dict[str, Any]) -> str:
     mark = f"superseded by {record['superseded-by']}" if record["superseded-by"] else record["status"]
     replaces = f", replaces {record['supersedes']}" if record["supersedes"] else ""
-    return f"- {record['id']} [{mark}] {record['title']} ({record['ts'][:10]}{replaces})"
+    origin = f", from {record['from'].replace(':', ' ')}" if record.get("from") else ""
+    return f"- {record['id']} [{mark}] {record['title']} ({record['ts'][:10]}{replaces}{origin})"
 
 
 def listing(thread: Path, *, include_superseded: bool = False) -> list[str]:
