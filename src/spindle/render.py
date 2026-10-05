@@ -95,6 +95,9 @@ def _index_lines(thread: Path, *, artifact_limit: int | None, pointers: bool = T
     for item, date in registrations(thread):
         if item["registration"].get("kind") == "reading-guide":
             continue  # written before orientation.md replaced the registered reading guide
+        if (item["registration"].get("kind") == "doc" and not item.get("pointer")
+                and not (thread / item["registration"]["path"]).exists()):
+            continue  # a pre-10-04 doc since moved into artifacts/
         key = (item["registration"]["path"], item.get("pointer", "").split("@", 1)[0] or None)
         newest.pop(key, None)  # re-insert so order follows the newest registration
         newest[key] = (item, date)

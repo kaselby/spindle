@@ -265,6 +265,12 @@ def test_old_doc_and_reading_guide_registrations_in_the_log(root, make_thread, r
     render.write_index(path)
     index = (path / "index.md").read_text(encoding="utf-8")
     assert "- **docs/how.md** (" in index and "reading-guide" not in index
+    # Moved into artifacts/ and registered there: the old doc entry drops out.
+    (path / "artifacts").mkdir(exist_ok=True)
+    (path / "docs" / "how.md").rename(path / "artifacts" / "how.md")
+    assert run("register", identifier, "artifacts/how.md", "--purpose", "how it works", "--root", root).code == 0
+    listing = run("view", identifier, "--root", root).out.split("# Artifacts", 1)[1]
+    assert "docs/how.md" not in listing and "artifacts/how.md" in listing
 
 
 # ── orientation.md ───────────────────────────────────────────────────────────
