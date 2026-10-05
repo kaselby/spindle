@@ -328,7 +328,8 @@
             "status": { "enum": ["working", "settled"] },
             "file": { "type": "string", "pattern": "^decisions/D[0-9]{3,}-[^/]+\\.md$" },
             "supersedes": { "type": "string", "pattern": "^D[0-9]{3,}$" },
-            "from": { "description": "Carried up at merge: `<child>:<decision>` in the merged subthread.", "type": "string", "pattern": "^[a-z0-9]{6,12}:D[0-9]{3,}$" }
+            "from": { "description": "Carried up at merge: `<child>:<decision>` in the merged subthread.", "type": "string", "pattern": "^[a-z0-9]{6,12}:D[0-9]{3,}$" },
+            "created": { "description": "Carried up at merge: when the decision was first made, which listings show instead of the merge's time.", "type": "string" }
           }
         } },
         "required": ["payload"]

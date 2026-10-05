@@ -12,7 +12,7 @@ import yaml
 
 from conftest import git
 
-from spindle import events, lifecycle, metadata, store, summary
+from spindle import decisions, events, lifecycle, metadata, store, summary
 
 PARENT_BODY = "Parent synthesis.\n\n## Status\nThe parent holds.\n"
 CHILD_BODY = "Child synthesis.\n\nA second outline line.\n\n## Status\nThe child is done.\n"
@@ -180,6 +180,13 @@ def test_merge_carries_live_decisions_up(root, run, body, make_thread):
     assert run("decide", child, "Second try", body(text), "--supersedes", "D001", "--settled",
                "--root", root).code == 0
     assert run("decide", child, "Separate call", body(text), "--root", root).code == 0
+    # Backdate the child's decisions, as if they were made long before the merge.
+    log = store.resolve_thread(root, child) / "log.jsonl"
+    lines = [json.loads(line) for line in log.read_text().splitlines()]
+    for event in lines:
+        if event["type"] == "decided":
+            event["ts"] = "2026-01-02T03:04:05Z"
+    log.write_text("".join(json.dumps(event, separators=(",", ":")) + "\n" for event in lines))
     _cp(run, root, body, parent, PARENT_BODY)
     _cp(run, root, body, child, CHILD_BODY)
 
@@ -194,6 +201,11 @@ def test_merge_carries_live_decisions_up(root, run, body, make_thread):
     assert "D002 [settled] Second try" in listed and f"from {child} D002" in listed
     assert "D003 [working] Separate call" in listed and f"from {child} D003" in listed
     assert "First try" not in listed
+    # Carried decisions keep the date they were first made, not the merge's.
+    assert f"D002 [settled] Second try (2026-01-02, from {child} D002)" in listed
+    parent_dates = {r["id"]: r["ts"] for r in decisions.records(store.resolve_thread(root, parent))}
+    assert parent_dates["D002"] == parent_dates["D003"] == "2026-01-02T03:04:05Z"
+    assert parent_dates["D001"] != "2026-01-02T03:04:05Z"
     shown = run("decisions", parent, "D002", "--root", root).out
     assert "Use A." in shown and f"from: {child}:D002" in shown
     checkpoint_text = (store.resolve_thread(root, parent) / "checkpoints" / "c0002.md").read_text()

@@ -95,8 +95,9 @@ def records(thread: Path) -> list[dict[str, Any]]:
             continue
         payload = event["payload"]
         record = {
+            # A decision carried up at merge keeps the date it was first made.
             "id": payload["decision"], "title": payload["title"], "status": payload["status"],
-            "ts": event["ts"], "by": event["by"], "file": payload.get("file"),
+            "ts": payload.get("created") or event["ts"], "by": event["by"], "file": payload.get("file"),
             "supersedes": payload.get("supersedes"), "superseded-by": None,
             "from": payload.get("from"),
         }
@@ -192,7 +193,7 @@ def carry(parent: Path, child: Path, by: dict[str, str], created: list[Path]) ->
         relative = f"decisions/{identifier}-{slugify(record['title'])}.md"
         front = {
             "id": identifier, "title": record["title"], "status": record["status"],
-            "created": events.timestamp(), "by": by, "from": source,
+            "created": record["ts"], "by": by, "from": source,
         }
         path = parent / relative
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -204,7 +205,7 @@ def carry(parent: Path, child: Path, by: dict[str, str], created: list[Path]) ->
             raise ThreadError(_RACE.format(thread=parent.name), code=4) from None
         tip = events.append(parent, "decided", {
             "decision": identifier, "title": record["title"], "status": record["status"],
-            "file": relative, "from": source,
+            "file": relative, "from": source, "created": record["ts"],
         }, by, expected_tip=tip)["id"]
         carried.append({"from": record["id"], "decision": identifier})
     return carried

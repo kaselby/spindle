@@ -170,7 +170,8 @@ its replacement instead. Which decisions are live is computed from the log.
 ones, `thread decisions <id> DNNN` prints one in full, and with no id it lists
 every active thread's. The view page shows only a count line. At merge, the
 child's live decisions percolate up: each becomes the parent's next decision,
-with the same title, status and text, a copied file, and `from: <child>:<id>`.
+with the same title, status, text and original date, a copied file, and
+`from: <child>:<id>`.
 Superseded ones stay with the child.
 
 ## Events
