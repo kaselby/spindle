@@ -764,9 +764,56 @@ def run(args: argparse.Namespace) -> None:
             _emit(text)
 
 
+TASK_VERBS = ("add", "close", "remove", "list")
+_VALUE_OPTIONS = ("--root", "--by")
+
+
+def _task_order(argv: list[str]) -> list[str]:
+    """Accept `thread task` with the thread before the verb.
+
+    Agents often write `thread task <thread> close <task>` or
+    `thread task <thread> <task> close`; both are moved into the documented
+    `thread task close <thread> <task>` before argparse sees them. Only
+    unambiguous forms are moved: if the first word is already a verb, or the
+    words name no verb or more than one, argv is left as written (and argparse
+    reports the error it always has). Help isn't rewritten, so usage text only
+    ever shows the verb-first form.
+    """
+    if not argv or argv[0] != "task":
+        return argv
+    rest = argv[1:]
+    positions: list[int] = []  # indexes into rest of the positional words
+    skip = False
+    for index, word in enumerate(rest):
+        if skip:
+            skip = False
+            continue
+        if word == "--" or word == "-h" or (len(word) > 2 and "--help".startswith(word)):
+            return argv
+        if word.startswith("-"):
+            # argparse also takes unambiguous prefixes (--ro for --root).
+            skip = "=" not in word and len(word) > 2 and any(option.startswith(word) for option in _VALUE_OPTIONS)
+            continue
+        positions.append(index)
+    words = [rest[index] for index in positions]
+    if not words or words[0] in TASK_VERBS:
+        return argv
+    verbs = [place for place, word in enumerate(words) if word in TASK_VERBS]
+    if len(verbs) != 1:
+        return argv
+    place = verbs[0]
+    verb = words[place]
+    thread_then_verb = place == 1
+    verb_last = place == 2 and len(words) == 3 and verb in ("close", "remove")
+    if not (thread_then_verb or verb_last):
+        return argv
+    moved = positions[place]
+    return ["task", verb, *rest[:moved], *rest[moved + 1:]]
+
+
 def main(argv: list[str] | None = None) -> int:
     try:
-        run(parser().parse_args(argv))
+        run(parser().parse_args(_task_order(sys.argv[1:] if argv is None else list(argv))))
         return 0
     except NeedsInput as exc:
         print(str(exc), end="" if str(exc).endswith("\n") else "\n")

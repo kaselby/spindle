@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 import yaml
 
 from spindle import events, metadata, store
@@ -120,3 +121,62 @@ def test_promote_creates_a_subthread_and_marks_the_task(root, make_thread, run, 
     again = run("promote", identifier, task["id"], "Again", "--origin", origin, "--root", root)
     assert again.code == 2 and "already promoted" in again.err
     assert len(list((root / "default" / "threads").iterdir())) == 2
+
+
+def test_thread_before_verb_is_accepted(root, make_thread, run):
+    identifier = make_thread()
+    path = store.resolve_thread(root, identifier)
+
+    # task <thread> add "text"
+    first = json.loads(run("task", identifier, "add", "write the tests", "--root", root, "--json").out)
+    second = json.loads(run("task", identifier, "add", "run the tests", "--root", root, "--json").out)
+    third = json.loads(run("task", identifier, "add", "ship it", "--root", root, "--json").out)
+    # task <thread> list
+    assert run("task", identifier, "list", "--root", root).out.splitlines() == [
+        f"- [ ] {first['id']} write the tests",
+        f"- [ ] {second['id']} run the tests",
+        f"- [ ] {third['id']} ship it",
+    ]
+    # task <thread> close <task>, with an option ahead of the words
+    assert run("task", "--root", root, identifier, "close", first["id"]).code == 0
+    # task <thread> <task> close
+    assert run("task", identifier, second["id"], "close", "--root", root).code == 0
+    # task <thread> <task> remove
+    assert run("task", identifier, third["id"], "remove", "--root", root).code == 0
+    assert f"[x] {first['id']}" in run("task", identifier, "list", "--all", "--root", root).out
+    assert [(task["id"], task["done"]) for task in _board(path)] == [(first["id"], True), (second["id"], True)]
+    assert [event["type"] for event in events.read_events(path)][-6:] == [
+        "task-added", "task-added", "task-added", "task-closed", "task-closed", "task-removed",
+    ]
+
+
+def test_task_order_only_moves_unambiguous_forms():
+    from spindle.cli import _task_order
+
+    canonical = ["task", "close", "abc123", "t1234", "--root", "/r"]
+    assert _task_order(canonical) == canonical
+    assert _task_order(["task", "abc123", "close", "t1234"]) == ["task", "close", "abc123", "t1234"]
+    assert _task_order(["task", "abc123", "t1234", "close"]) == ["task", "close", "abc123", "t1234"]
+    assert _task_order(["task", "--by", "s2", "abc123", "list"]) == ["task", "list", "--by", "s2", "abc123"]
+    # `remove` is also a well-formed thread id: a leading verb is always the verb.
+    assert _task_order(["task", "remove", "close", "t1234"]) == ["task", "remove", "close", "t1234"]
+    # Two verbs after the thread: close task `remove`, or remove task `close`?
+    assert _task_order(["task", "abc123", "close", "remove"]) == ["task", "abc123", "close", "remove"]
+    # A verb in any other place, or a help request, is left to argparse.
+    assert _task_order(["task", "abc123", "t1234", "add"]) == ["task", "abc123", "t1234", "add"]
+    assert _task_order(["task", "abc123", "close", "--help"]) == ["task", "abc123", "close", "--help"]
+    # A value option's argument is never taken for the verb.
+    assert _task_order(["task", "abc123", "--by", "list", "close", "t1"]) == \
+        ["task", "close", "abc123", "--by", "list", "t1"]
+
+
+def test_ambiguous_task_order_still_errors(root, make_thread, run, capsys):
+    identifier = make_thread()
+    added = json.loads(run("task", "add", identifier, "keep me", "--root", root, "--json").out)
+    with pytest.raises(SystemExit) as exited:
+        run("task", identifier, "close", "remove", "--root", root)
+    assert exited.value.code == 2
+    err = capsys.readouterr().err
+    assert f"invalid choice: '{identifier}'" in err
+    assert "usage: thread task [-h] <add|close|remove|list>" in err
+    assert run("task", "list", identifier, "--root", root).out.splitlines() == [f"- [ ] {added['id']} keep me"]
