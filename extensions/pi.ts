@@ -6,6 +6,9 @@
  * - Injects the thread-store snapshot once, as the first message of a new
  *   session, wrapped in <system-reminder> tags. It is never refreshed: not on
  *   resume, /reload, or after compaction.
+ * - Appends the mid-session reminder (prompts/reminder.md, via spindle.reminder) to a
+ *   tool result after every REMINDER_TOKENS of context growth or REMINDER_CALLS tool
+ *   calls, whichever comes first.
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { spawn } from "node:child_process";
@@ -24,6 +27,8 @@ const NO_UV =
 // must never wait on the network or run long. --offline makes uv use only what is
 // already installed or cached; the first `thread` command (online) finishes setup.
 const SNAPSHOT_TIMEOUT_MS = 10_000;
+const REMINDER_CALLS = Number(process.env.SPINDLE_REMINDER_CALLS) || 50;
+const REMINDER_TOKENS = Number(process.env.SPINDLE_REMINDER_TOKENS) || 50_000;
 const NOT_READY =
   "<system-reminder>\nSpindle's thread snapshot couldn't be built at session start, so no thread list " +
   "is shown here. If Spindle was just installed, it is finishing its install in the background (this " +
@@ -69,7 +74,33 @@ export default function spindle(pi: ExtensionAPI) {
   const path = process.env.PATH ?? "";
   if (!path.split(delimiter).includes(bin)) process.env.PATH = path ? `${bin}${delimiter}${path}` : bin;
 
+  // Reminder counters, per session: tool calls, and context size when the reminder last fired.
+  let calls = 0;
+  let lastTokens: number | null = null;
+
+  pi.on("tool_result", async (event, ctx) => {
+    calls++;
+    const tokens = ctx.getContextUsage()?.tokens ?? null; // null right after compaction
+    // First reading, or compaction shrank the context: measure growth from here.
+    if (tokens !== null && (lastTokens === null || tokens < lastTokens)) lastTokens = tokens;
+    const grown = tokens !== null && lastTokens !== null && tokens - lastTokens >= REMINDER_TOKENS;
+    if (calls < REMINDER_CALLS && !grown) return;
+    calls = 0;
+    if (tokens !== null) lastTokens = tokens;
+    if (!onPath("uv")) return;
+    const result = await pi.exec(
+      "uv",
+      ["run", "--offline", "--quiet", "--frozen", "--no-dev", "--project", ROOT, "python", "-m", "spindle.reminder", "--wrap"],
+      { timeout: SNAPSHOT_TIMEOUT_MS },
+    );
+    if (result.code !== 0 || result.killed || !result.stdout.trim()) return;
+    // Append, so other extensions' tool_result changes are kept.
+    return { content: [...event.content, { type: "text" as const, text: `\n\n${result.stdout.trim()}` }] };
+  });
+
   pi.on("session_start", async (_event, ctx) => {
+    calls = 0;
+    lastTokens = null;
     setHarnessSession(ctx.sessionManager.getSessionId());
     if (ctx.cwd) process.env.SPINDLE_PROJECT = ctx.cwd; // the launch folder, for project-scoped stores
     // Only a brand-new session gets the snapshot. A new session already holds

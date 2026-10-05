@@ -270,6 +270,7 @@ All in `src/spindle/limits.py`:
 | claim expires after | 4 hours |
 | inactive after | 14 days |
 | inactive threads listed in the startup snapshot | 10 most recently active (every active thread is always listed) |
+| mid-session reminder | every 50,000 tokens of context growth or 50 tool calls, whichever comes first (`SPINDLE_REMINDER_TOKENS`, `SPINDLE_REMINDER_CALLS`) |
 | artifacts shown on the view page | 25 most recent |
 | largest registrable file | 5 MB |
 | orientation.md | 1,500 characters (doctor flags it; the view still shows it) |

@@ -33,6 +33,8 @@ from the next session.
 The repository is the plugin: each harness installs a copy of the whole tree.
 
 - `src/spindle/`: the `thread` CLI, and the startup snapshot (`python -m spindle.context`) the hooks inject
+  at session start, and the mid-session reminder (`python -m spindle.reminder`, text in
+  `prompts/reminder.md`) they add every 50,000 tokens of context growth or 50 tool calls
 - `bin/thread`: runs the CLI through uv; each harness plugin puts `bin/` on PATH
 - `skills/`: the agent-facing skills: `spindle-setup` (run once per harness) and `spindle-threads`
 - `prompts/system-blurb.md`: the standing instructions `thread setup` installs (Claude Code and omp: a rules file; pi: a block in AGENTS.md)

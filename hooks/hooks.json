@@ -22,6 +22,17 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/claude-reminder.sh",
+            "timeout": 15
+          }
+        ]
+      }
     ]
   }
 }
