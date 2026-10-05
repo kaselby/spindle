@@ -133,9 +133,9 @@ def linked_from(root: Path, identifier: str) -> list[tuple[Path, dict[str, str]]
 def metadata_baseline(thread: Path, log: list[dict[str, Any]]) -> dict[str, Any] | None:
     """thread.yml as it was at the latest checkpoint, for the view's "what
     changed" line. The newest of: a checkpoint's `metadata` block, the
-    `created` event. None when that checkpoint predates
-    the block (nothing to compare against). A `reparented` event after it is
-    the tool's own edit, logged, so the baseline takes that parent too."""
+    `created` event. None when that checkpoint can't be read. A `reparented`
+    event after it is the tool's own edit, logged, so the baseline takes that
+    parent too."""
     baseline = _baseline_event(thread, log)
     if baseline is None:
         return None
@@ -157,10 +157,9 @@ def _baseline_event(thread: Path, log: list[dict[str, Any]]) -> dict[str, Any] |
             try:
                 text = (thread / "checkpoints" / f"{payload['checkpoint']}.md").read_text(encoding="utf-8")
                 front, _ = parse_frontmatter(text)
-            except (OSError, ThreadError, KeyError, ValueError):
+                return metadata.baseline_from(front["metadata"])
+            except (OSError, ThreadError, KeyError, ValueError, TypeError, AttributeError):
                 return None
-            block = front.get("metadata")
-            return metadata.baseline_from(block) if isinstance(block, dict) else None
         if kind == "created":
             return metadata.baseline_from(payload)
     return None

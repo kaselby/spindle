@@ -18,6 +18,7 @@ reg = Registry().with_resources(
 V = lambda n: jsonschema.Draft202012Validator(schemas[n], registry=reg)
 
 TS = "2026-09-11T11:10:00-04:00"
+M = {"title": "T"}  # a checkpoint's metadata block
 ident = {"session": "tr-abc123", "agent": "worker"}
 # Event ids are timestamp+random strings and checkpoint ids are cNNNN
 # the earlier integer/digit forms are now invalid.
@@ -77,18 +78,19 @@ cases = {
     "registration":{"path":"artifacts/b.csv","purpose":"p"}}}, False),
   ({"id":E1,"ts":TS,"by":ident,"type":"task-added","payload":{"task":"t9k2a","text":"x","from":"k7q2m9xa"}}, True)],
  "checkpoint.schema.json": [
-  ({"id":"c0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"headline":"h"}, True),
-  ({"id":"c0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"headline":"h"*121}, False),
-  ({"id":"0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"headline":"h"}, False),
-  ({"id":"c0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"headline":"h","forced-by":"merge"}, True),
-  ({"id":"c0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"headline":"h","forced-by":"unsynced-bound"}, False),
-  ({"id":"c0005","thread":"k7q2m9xa","at":E4,"ts":TS,"by":ident,"headline":"h","inherited":[{"since":"c0002","text":"x"}]*3}, True),
-  ({"id":"c0005","thread":"k7q2m9xa","at":E4,"ts":TS,"by":ident,"headline":"h","inherited":[{"since":"c0002","text":"x"}]*4}, False),
+  ({"id":"c0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"metadata":M,"headline":"h"}, True),
+  ({"id":"c0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"metadata":M,"headline":"h"*121}, False),
+  ({"id":"0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"metadata":M,"headline":"h"}, False),
+  ({"id":"c0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"metadata":M,"headline":"h","forced-by":"merge"}, True),
+  ({"id":"c0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"metadata":M,"headline":"h","forced-by":"unsynced-bound"}, False),
+  ({"id":"c0005","thread":"k7q2m9xa","at":E4,"ts":TS,"by":ident,"metadata":M,"headline":"h","inherited":[{"since":"c0002","text":"x"}]*3}, True),
+  ({"id":"c0005","thread":"k7q2m9xa","at":E4,"ts":TS,"by":ident,"metadata":M,"headline":"h","inherited":[{"since":"c0002","text":"x"}]*4}, False),
   # The checkpoint no longer carries the sha of its own commit.
-  ({"id":"c0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"headline":"h","commit":"a"*40}, False),
+  ({"id":"c0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"metadata":M,"headline":"h","commit":"a"*40}, False),
   # The metadata baseline for the view's "thread.yml since the last checkpoint" line.
   ({"id":"c0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"headline":"h","metadata":{"title":"T","flags":{"a":1}}}, True),
-  ({"id":"c0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"headline":"h","metadata":{"tittle":"T"}}, False)],
+  ({"id":"c0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"headline":"h","metadata":{"tittle":"T"}}, False),
+  ({"id":"c0001","thread":"k7q2m9xa","at":E2,"ts":TS,"by":ident,"headline":"h"}, False)],
  "thread.schema.json": [
   ({"title":"Thread schemas"}, True),
   ({"title":"T","parent":"m3n4p5","from-task":"t9k2a",

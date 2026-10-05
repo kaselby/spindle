@@ -127,11 +127,13 @@ def append(
     """Append under an advisory lock; expected_tip makes the operation CAS."""
     if reopen and by.get("session") != "doctor" and kind != "state-changed":
         if lifecycle_state(read_events(thread)) == "inactive":
-            append(
+            reopened = append(
                 thread, "state-changed", {"from": "inactive", "to": "active"}, by,
                 expected_tip=expected_tip, reopen=False,
             )
-            expected_tip = tip(thread)
+            # Our own event is the tip now, so a write that slips in after it still fails.
+            if expected_tip is not None:
+                expected_tip = reopened["id"]
 
     log = thread / "log.jsonl"
     log.parent.mkdir(parents=True, exist_ok=True)
