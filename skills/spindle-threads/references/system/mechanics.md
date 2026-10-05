@@ -256,7 +256,8 @@ days to inactive, and flags:
 
 ## Limits
 
-All in `src/spindle/limits.py`:
+All in `src/spindle/limits.py`, except the mid-session reminder, which the hooks
+(`hooks/claude-reminder.sh`, `extensions/pi.ts`) count:
 
 | Limit | Value |
 |---|---|

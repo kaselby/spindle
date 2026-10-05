@@ -26,6 +26,8 @@ STATUSES = ("working", "settled")
 REQUIRED = ("Decision", "Why")
 OPTIONAL = ("Alternatives",)
 _ID = re.compile(r"^D\d{3,}$")
+_RACE = ("another session recorded a decision in {thread} while this command ran. "
+         "Nothing was written; run the command again.")
 
 TEMPLATE = """\
 ## Decision
@@ -52,6 +54,11 @@ def template(command: str) -> str:
 def _sections(body: str) -> dict[str, str]:
     lines = strip_comments(body).splitlines()
     headings = [(i, line[3:].strip()) for i, line in enumerate(lines) if line.startswith("## ")]
+    if "\n".join(lines[:headings[0][0] if headings else len(lines)]).strip():
+        raise ThreadError(
+            "a decision has only `## Decision`, `## Why` and optionally `## Alternatives`; "
+            "move the text above the first heading into one of them."
+        )
     found: dict[str, str] = {}
     for position, (start, name) in enumerate(headings):
         end = headings[position + 1][0] if position + 1 < len(headings) else len(lines)
@@ -109,6 +116,9 @@ def decide(
             "Detail belongs in the body."
         )
     body = _check_body(body_text)
+    # The id is the highest so far plus one. expected_tip makes the append fail if
+    # another session recorded something meanwhile, so two decisions can't share an id.
+    tip = events.tip(thread)
     existing = records(thread)
     if supersedes is not None:
         supersedes = supersedes.upper()
@@ -133,17 +143,27 @@ def decide(
     }
     if supersedes:
         front["supersedes"] = supersedes
-    atomic_text(thread / relative, markdown(front, body))
+    path = thread / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with path.open("x", encoding="utf-8") as handle:
+            handle.write(markdown(front, body))
+    except FileExistsError:
+        raise ThreadError(_RACE.format(thread=thread.name), code=4) from None
+    payload: dict[str, Any] = {"decision": identifier, "title": title, "status": status, "file": relative}
+    if supersedes:
+        payload["supersedes"] = supersedes
+    try:
+        event = events.append(thread, "decided", payload, by, expected_tip=tip)
+    except ThreadError:
+        path.unlink()
+        raise
     if supersedes:
         old_file = thread / (old["file"] or "")
         if old["file"] and old_file.is_file():
             old_front, old_body = parse_frontmatter(old_file.read_text(encoding="utf-8"))
             old_front["superseded-by"] = identifier
             atomic_text(old_file, markdown(old_front, old_body))
-    payload: dict[str, Any] = {"decision": identifier, "title": title, "status": status, "file": relative}
-    if supersedes:
-        payload["supersedes"] = supersedes
-    event = events.append(thread, "decided", payload, by)
     return {**payload, "event": event["id"], "path": str(thread / relative)}
 
 

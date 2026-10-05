@@ -114,7 +114,7 @@ def parser() -> argparse.ArgumentParser:
     create.add_argument("--ns", help=f"{guide.NAMESPACE_HELP} (default: $SPINDLE_NAMESPACE if set)")
     _common(create, identity=True, data=True)
 
-    view = commands.add_parser("view", help="the thread's orientation page: read this first")
+    view = commands.add_parser("view", help="the thread's view page: read this first")
     view.add_argument("thread", help="thread id (a unique prefix works)")
     view.add_argument("--deep", action="store_true", help="include subthreads' checkpoints in the history")
     _common(view, identity=True, data=True)

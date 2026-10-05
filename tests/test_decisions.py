@@ -106,3 +106,10 @@ def test_show_refuses_an_unknown_decision(make_thread, run, root):
     identifier = make_thread()
     result = run("decisions", identifier, "D004", "--root", root)
     assert result.code == 2 and "no decision D004" in result.err
+
+
+def test_text_above_the_first_heading_is_refused(make_thread, run, root, tmp_path):
+    identifier = make_thread()
+    result = run("decide", identifier, "One folder", _file(tmp_path, "d.md", "Preamble.\n\n" + GOOD), "--root", root)
+    assert result.code != 0 and "above the first heading" in result.err
+    assert not list((store.resolve_thread(root, identifier) / "decisions").glob("D*.md"))

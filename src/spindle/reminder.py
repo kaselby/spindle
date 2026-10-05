@@ -2,9 +2,10 @@
 
 Hosts decide when it fires (every REMINDER_TOKENS of context growth or
 REMINDER_CALLS tool calls, whichever comes first) and call
-`python -m spindle.reminder --session <id>` to get the text. The header names the
-threads this session has claimed, and adds the count of events since the last
-checkpoint only when it's over the same threshold doctor uses.
+`python -m spindle.reminder` to get the text. The header names the threads this
+session has claimed (the session is resolved as `thread` resolves it), and adds
+the count of events since the last checkpoint only when it's over the same
+threshold doctor uses.
 """
 
 from __future__ import annotations
@@ -56,7 +57,7 @@ def text(root: Path | None, session: str) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """`python -m spindle.reminder [--session ID] [--wrap | --claude-hook EVENT] [--root PATH]`, for hosts only."""
+    """`python -m spindle.reminder [--wrap | --claude-hook EVENT] [--root PATH]`, for hosts only."""
     import argparse
     import json
 
@@ -65,13 +66,12 @@ def main(argv: list[str] | None = None) -> int:
     from .store import ThreadError, root_path
 
     parser = argparse.ArgumentParser(prog="python -m spindle.reminder")
-    parser.add_argument("--session", help="the session to report on (default: resolved as `thread` does)")
     parser.add_argument("--root", type=Path)
     style = parser.add_mutually_exclusive_group()
     style.add_argument("--wrap", action="store_true", help="wrap in <system-reminder> tags")
     style.add_argument("--claude-hook", metavar="EVENT", help="emit Claude Code hook JSON")
     args = parser.parse_args(argv)
-    session = args.session or identity.resolve()["session"]
+    session = identity.resolve()["session"]
     try:
         root = root_path(args.root)
     except ThreadError:

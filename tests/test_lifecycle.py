@@ -758,29 +758,3 @@ def test_merge_leaves_the_childs_orientation_behind(root, run, body, loaded):
     index = index_path.read_text(encoding="utf-8")
     assert "orientation.md" not in index and "Reading guide" not in index
 
-
-def test_merge_with_old_doc_and_reading_guide_registrations(root, run, body, loaded):
-    """A child logged before 10-04: its old reading guide is ignored, its old doc
-    can't be promoted but stays behind as a pointer, and nothing copied into the
-    parent carries a `kind`."""
-    parent, child, path = loaded["parent"], loaded["child"], loaded["child_path"]
-    (path / "docs").mkdir()
-    (path / "docs" / "how.md").write_text("# how", encoding="utf-8")
-    old = {"session": "s1", "agent": "a1"}  # the test session, as if it had written them itself
-    events.append(path, "register", {"registration": {
-        "path": "docs/how.md", "kind": "doc", "purpose": "how it works", "read-when": "before changing it",
-    }, "checkpoint": "pending"}, old)
-    events.append(path, "register", {"registration": {
-        "path": "reading-guide.md", "kind": "reading-guide",
-    }, "checkpoint": "pending"}, old)
-    _cp(run, root, body, child, CHILD_BODY)
-
-    refused = run("merge", child, "--promote", "docs/how.md", "--root", root)
-    assert refused.code == lifecycle.NOT_REGISTERED and "before docs were retired" in refused.err
-    assert run("merge", child, "--promote", "artifacts/guide.md", "--body", body(_merge_text(child)),
-               "--root", root).code == 0
-    copied = [event["payload"] for event in _log(loaded["parent_path"]) if event["type"] == "register"]
-    assert all("kind" not in payload["registration"] for payload in copied)
-    pointers = [payload for payload in copied if payload.get("pointer")]
-    assert {payload["registration"]["path"] for payload in pointers} == {"artifacts/kept.csv", "artifacts/left.csv", "docs/how.md"}
-    assert not (loaded["parent_path"] / "docs").exists()

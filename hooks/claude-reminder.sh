@@ -10,10 +10,11 @@ sid=$(field session_id | tr -d '-')
 [ -n "$sid" ] || exit 0
 transcript=$(field transcript_path)
 
-# Context size: input plus cache tokens of the latest model response in the transcript.
+# Context size: input plus cache tokens of the model's latest response in the transcript.
 tokens=0
 if [ -n "$transcript" ] && [ -f "$transcript" ]; then
-  usage=$(tail -n 40 "$transcript" | grep -o '"usage":{[^}]*}' | tail -n 1)
+  # Only the model's own responses: a subagent's tool result carries its own usage.
+  usage=$(tail -n 40 "$transcript" | grep '"type":"assistant"' | grep -o '"usage":{[^}]*}' | tail -n 1)
   for key in input_tokens cache_creation_input_tokens cache_read_input_tokens; do
     n=$(printf '%s' "$usage" | sed -n "s/.*\"$key\":\([0-9]*\).*/\1/p")
     tokens=$((tokens + ${n:-0}))
@@ -35,9 +36,9 @@ echo "0 $tokens" > "$state"
 
 command -v uv >/dev/null 2>&1 || exit 0
 [ -n "$CLAUDE_PROJECT_DIR" ] && export SPINDLE_PROJECT="$CLAUDE_PROJECT_DIR"
-session="claude-$(printf '%s' "$sid" | tail -c 8)"
+# The session is resolved as `thread` resolves it (src/spindle/identity.py).
 if out=$(uv run --offline --quiet --frozen --no-dev --project "$root" python -m spindle.reminder \
-    --session "$session" --claude-hook PostToolUse 2>/dev/null); then
+    --claude-hook PostToolUse 2>/dev/null); then
   printf '%s\n' "$out"
 fi
 exit 0

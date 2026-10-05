@@ -88,16 +88,11 @@ def _entry_details(thread: Path, payload: dict[str, Any], date: str, *, artifact
 
 
 def _index_lines(thread: Path, *, artifact_limit: int | None, pointers: bool = True) -> list[str]:
-    """The docs and artifacts sections. With ``pointers=False`` (the view page),
+    """The artifacts section. With ``pointers=False`` (the view page),
     entries that point into merged children collapse to one count line. A path
     registered again shows once, with its newest registration."""
     newest: dict[tuple[str, str | None], tuple[dict[str, Any], str]] = {}
     for item, date in registrations(thread):
-        if item["registration"].get("kind") == "reading-guide":
-            continue  # written before orientation.md replaced the registered reading guide
-        if (item["registration"].get("kind") == "doc" and not item.get("pointer")
-                and not (thread / item["registration"]["path"]).exists()):
-            continue  # a pre-10-04 doc since moved into artifacts/
         key = (item["registration"]["path"], item.get("pointer", "").split("@", 1)[0] or None)
         newest.pop(key, None)  # re-insert so order follows the newest registration
         newest[key] = (item, date)
@@ -354,7 +349,7 @@ def view(root: Path, thread: Path, *, deep: bool = False) -> str:
         shown = (json.dumps(value) if value is None or isinstance(value, bool) else value for value in cache["flags"].values())
         title_block.append("Flags: " + ", ".join(f"{name}={value}" for name, value in zip(cache["flags"], shown)))
     title_block += [
-        "*This page is the thread's orientation. Read the origin first; "
+        "*Read the origin first; "
         "everything after it is measured against it.*", "",
     ]
     banner = [

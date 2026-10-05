@@ -10,7 +10,7 @@ from datetime import timedelta
 import yaml
 
 from conftest import git
-from spindle import events, metadata, render, store
+from spindle import events, metadata, store
 from spindle.limits import LIMITS
 
 
@@ -225,52 +225,8 @@ def test_checkpoints_record_the_metadata_baseline(root, make_thread, run, body):
 # ── register ─────────────────────────────────────────────────────────────────
 
 
-def test_old_register_kinds_still_read(root, make_thread, run):
-    identifier = make_thread()
-    path = store.resolve_thread(root, identifier)
-    (path / "artifacts" / "w.bin").write_text("x", encoding="utf-8")
-    events.append(path, "register", {
-        "registration": {"path": "artifacts/w.bin", "kind": "weights", "purpose": "old weights"},
-        "checkpoint": "pending",
-    }, {"session": "old", "agent": "old"})
-    view = run("view", identifier, "--root", root)
-    assert view.code == 0, view.err
-    assert "- **artifacts/w.bin** (" in view.out and "— old weights" in view.out
-    assert "weights," not in view.out.split("# Artifacts")[1]
 
 
-def test_old_doc_and_reading_guide_registrations_in_the_log(root, make_thread, run):
-    """Logs written before docs and the registered reading guide were retired:
-    an old docs/ path lists as an artifact; a reading-guide registration is skipped."""
-    identifier = make_thread()
-    path = store.resolve_thread(root, identifier)
-    (path / "docs").mkdir()
-    (path / "docs" / "how.md").write_text("# how", encoding="utf-8")
-    (path / "reading-guide.md").write_text("1. x\n", encoding="utf-8")
-    old = {"session": "old", "agent": "old"}
-    events.append(path, "register", {
-        "registration": {"path": "docs/how.md", "kind": "doc", "purpose": "how it works",
-                         "read-when": "before changing it"},
-        "checkpoint": "pending",
-    }, old)
-    events.append(path, "register", {
-        "registration": {"path": "reading-guide.md", "kind": "reading-guide", "purpose": "added a branch"},
-        "checkpoint": "pending",
-    }, old)
-    view = run("view", identifier, "--root", root)
-    assert view.code == 0, view.err
-    listing = view.out.split("# Artifacts", 1)[1].split("# Related threads", 1)[0]
-    assert "- **docs/how.md** (" in listing and ") — how it works\n  *Read when:* before changing it" in listing
-    assert "reading-guide" not in listing
-    render.write_index(path)
-    index = (path / "index.md").read_text(encoding="utf-8")
-    assert "- **docs/how.md** (" in index and "reading-guide" not in index
-    # Moved into artifacts/ and registered there: the old doc entry drops out.
-    (path / "artifacts").mkdir(exist_ok=True)
-    (path / "docs" / "how.md").rename(path / "artifacts" / "how.md")
-    assert run("register", identifier, "artifacts/how.md", "--purpose", "how it works", "--root", root).code == 0
-    listing = run("view", identifier, "--root", root).out.split("# Artifacts", 1)[1]
-    assert "docs/how.md" not in listing and "artifacts/how.md" in listing
 
 
 # ── orientation.md ───────────────────────────────────────────────────────────

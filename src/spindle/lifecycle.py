@@ -198,11 +198,9 @@ def _registered(thread: Path) -> dict[str, dict[str, Any]]:
     Pointers are other threads' files, so they are not promotable."""
     found: dict[str, dict[str, Any]] = {}
     for payload, _ in render.registrations(thread):
-        if payload.get("pointer") or payload["registration"].get("kind") == "reading-guide":
+        if payload.get("pointer"):
             continue
-        registration = dict(payload["registration"])
-        registration.pop("kind", None)  # registrations written before 10-04 carried a kind
-        found[registration["path"]] = registration
+        found[payload["registration"]["path"]] = dict(payload["registration"])
     return found
 
 
@@ -275,12 +273,6 @@ def merge(
             raise ThreadError(
                 f"--promote takes artifacts registered in {child_id}, and {relative} isn't one. "
                 f"Registered: {known}. (`thread register {child_id} <path> ...` registers a file.)",
-                code=NOT_REGISTERED,
-            )
-        if not relative.startswith("artifacts/"):
-            raise ThreadError(
-                f"{relative} was registered as a doc, before docs were retired, so it can't be copied into "
-                f"{parent_id}. It stays in {child_id}, and {parent_id}'s index points to it.",
                 code=NOT_REGISTERED,
             )
         if relative not in wanted:
