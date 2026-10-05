@@ -166,6 +166,7 @@
             "promoted": { "description": "Paths copied child→parent.", "type": "array", "items": { "$ref": "common.schema.json#/$defs/relPath" } },
             "pointers": { "description": "Registered child items left in the child and pointed at from the parent's index.", "type": "array", "items": { "$ref": "common.schema.json#/$defs/relPath" } },
             "tasks": { "description": "Ids the rolled-up tasks were given on the parent's board.", "type": "array", "items": { "type": "string" } },
+            "decisions": { "description": "Ids the child's live decisions were given on the parent.", "type": "array", "items": { "type": "string", "pattern": "^D[0-9]{3,}$" } },
             "forced": { "description": "True when --force reparented the child's own open children.", "type": "boolean" }
           }
         } },
@@ -317,7 +318,7 @@
     {
       "if": { "properties": { "type": { "const": "decided" } } },
       "then": {
-        "description": "A decision was recorded in decisions/<file>. working is the current best judgement; settled means the user addressed it directly. supersedes names the decision it replaces, which stays on disk marked superseded-by.",
+        "description": "A decision was recorded in decisions/<file>. working is the current best judgement; settled means the user addressed it directly. supersedes names the decision it replaces, which stays on disk marked superseded-by. from marks one carried up from a merged subthread.",
         "properties": { "payload": {
           "type": "object", "additionalProperties": false,
           "required": ["decision", "title", "status", "file"],
@@ -326,7 +327,8 @@
             "title": { "type": "string", "minLength": 1, "maxLength": 80 },
             "status": { "enum": ["working", "settled"] },
             "file": { "type": "string", "pattern": "^decisions/D[0-9]{3,}-[^/]+\\.md$" },
-            "supersedes": { "type": "string", "pattern": "^D[0-9]{3,}$" }
+            "supersedes": { "type": "string", "pattern": "^D[0-9]{3,}$" },
+            "from": { "description": "Carried up at merge: `<child>:<decision>` in the merged subthread.", "type": "string", "pattern": "^[a-z0-9]{6,12}:D[0-9]{3,}$" }
           }
         } },
         "required": ["payload"]

@@ -8,7 +8,9 @@ stays, marked `superseded-by`. Which decisions are live is computed from the
 log; the frontmatter mark is for anyone reading the file directly.
 
 Decisions are looked up with `thread decisions`; the view page only says how
-many there are.
+many there are. When a subthread merges, its live decisions percolate up: each
+becomes one of the parent's (`carry`), so supersede, look-up and the next merge
+up all work the same way.
 """
 
 from __future__ import annotations
@@ -85,7 +87,8 @@ def _check_body(body: str) -> str:
 
 def records(thread: Path) -> list[dict[str, Any]]:
     """Every decision in the thread, oldest first, from the log. Each record
-    has id, title, status, ts, by, file, supersedes and superseded-by."""
+    has id, title, status, ts, by, file, supersedes, superseded-by, and from
+    (`<child>:<id>` for a decision carried up from a merged subthread)."""
     found: dict[str, dict[str, Any]] = {}
     for event in events.read_events(thread):
         if event["type"] != "decided":
@@ -95,6 +98,7 @@ def records(thread: Path) -> list[dict[str, Any]]:
             "id": payload["decision"], "title": payload["title"], "status": payload["status"],
             "ts": event["ts"], "by": event["by"], "file": payload.get("file"),
             "supersedes": payload.get("supersedes"), "superseded-by": None,
+            "from": payload.get("from"),
         }
         found[record["id"]] = record
         if record["supersedes"] in found:
@@ -167,10 +171,42 @@ def decide(
     return {**payload, "event": event["id"], "path": str(thread / relative)}
 
 
+def carry(parent: Path, child: Path, by: dict[str, str]) -> list[dict[str, Any]]:
+    """At merge, each live decision of the child becomes one of the parent's: the
+    parent's next id, the same title, status and text, and `from` naming the
+    child's id. Superseded ones stay behind. Runs inside merge, which has already
+    checked that both threads are current, so there is no CAS here. Returns one
+    {"from", "decision", "path"} per decision carried, in order."""
+    child_id = child.name.split("-", 1)[0]
+    number = max((int(record["id"][1:]) for record in records(parent)), default=0)
+    carried = []
+    for record in live(child):
+        number += 1
+        identifier = f"D{number:03d}"
+        source = f"{child_id}:{record['id']}"
+        _, body = parse_frontmatter((child / record["file"]).read_text(encoding="utf-8"))
+        relative = f"decisions/{identifier}-{slugify(record['title'])}.md"
+        front = {
+            "id": identifier, "title": record["title"], "status": record["status"],
+            "created": events.timestamp(), "by": by, "from": source,
+        }
+        path = parent / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("x", encoding="utf-8") as handle:
+            handle.write(markdown(front, body))
+        carried.append({"from": record["id"], "decision": identifier, "path": path})
+        events.append(parent, "decided", {
+            "decision": identifier, "title": record["title"], "status": record["status"],
+            "file": relative, "from": source,
+        }, by)
+    return carried
+
+
 def _line(record: dict[str, Any]) -> str:
     mark = f"superseded by {record['superseded-by']}" if record["superseded-by"] else record["status"]
     replaces = f", replaces {record['supersedes']}" if record["supersedes"] else ""
-    return f"- {record['id']} [{mark}] {record['title']} ({record['ts'][:10]}{replaces})"
+    origin = f", from {record['from'].replace(':', ' ')}" if record.get("from") else ""
+    return f"- {record['id']} [{mark}] {record['title']} ({record['ts'][:10]}{replaces}{origin})"
 
 
 def listing(thread: Path, *, include_superseded: bool = False) -> list[str]:

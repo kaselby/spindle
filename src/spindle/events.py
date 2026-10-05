@@ -262,7 +262,8 @@ def event_summary(event: dict[str, Any], *, full_note: bool = False) -> str:
         return "released"
     if event["type"] == "decided":
         replaces = f", supersedes {payload['supersedes']}" if payload.get("supersedes") else ""
-        return f"{payload['decision']} ({payload['status']}{replaces}): {payload['title']}"
+        origin = f", from {payload['from'].replace(':', ' ')}" if payload.get("from") else ""
+        return f"{payload['decision']} ({payload['status']}{replaces}{origin}): {payload['title']}"
     pieces = []
     for key, value in payload.items():
         if isinstance(value, (dict, list)):

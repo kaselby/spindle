@@ -44,6 +44,9 @@ latest.
    - **Open tasks:** `--tasks <id> ...` or `--all-tasks` copies them onto the
      parent's list. Take the ones that still need doing; the rest stay with the
      child.
+   - **Decisions** need no choosing: the child's live ones become the parent's,
+     renumbered and marked with where they came from. If one only mattered
+     inside the subthread, supersede it on the parent afterwards.
 2. **Print the template:** `thread merge <child-id>` with your flags and no
    `--body`. It's the parent's next checkpoint, with a suggested headline and
    the facts of the merge filled in.

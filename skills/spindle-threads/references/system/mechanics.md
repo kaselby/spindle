@@ -168,8 +168,10 @@ its replacement instead. Which decisions are live is computed from the log.
 `thread decisions <id>` lists live decisions, one line each:
 `- D002 [working] Title (2026-10-04, replaces D001)`. `--all` adds superseded
 ones, `thread decisions <id> DNNN` prints one in full, and with no id it lists
-every active thread's. The view page shows only a count line. Decisions stay
-with their thread at merge.
+every active thread's. The view page shows only a count line. At merge, the
+child's live decisions percolate up: each becomes the parent's next decision,
+with the same title, status and text, a copied file, and `from: <child>:<id>`.
+Superseded ones stay with the child.
 
 ## Events
 

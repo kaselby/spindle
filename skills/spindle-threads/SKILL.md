@@ -126,6 +126,7 @@ so a later session can judge whether they still hold.
 - **Settled** (`--settled`) only if the user addressed it directly.
 - **To change one**, record the new decision with `--supersedes DNNN`; the old
   one stays on file.
+- **At merge**, a subthread's live decisions become its parent's.
 
 `thread decisions <id>` lists them.
 

@@ -125,7 +125,7 @@ def test_merge_copies_points_rolls_up_and_commits_once(root, run, body, loaded):
         "child": child, "checkpoint": "c0001",
         "promoted": ["artifacts/kept.csv", "artifacts/guide.md"],
         "pointers": ["artifacts/left.csv"],
-        "tasks": [added[0]["payload"]["task"]], "forced": False,
+        "tasks": [added[0]["payload"]["task"]], "decisions": [], "forced": False,
     }
 
     # The forced checkpoint: the author's headline, narrative and Status, with
@@ -167,6 +167,38 @@ def test_merge_copies_points_rolls_up_and_commits_once(root, run, body, loaded):
     assert any(f"{child}" in name for name in touched)
     assert all(parent in name or child in name for name in touched)
 
+
+
+def test_merge_carries_live_decisions_up(root, run, body, make_thread):
+    """A merged subthread's live decisions become the parent's, numbered after the
+    parent's own; one the child superseded stays behind."""
+    parent = make_thread("Parent thread")
+    child = make_thread("Child thread", "--parent", parent)
+    text = "## Decision\nUse A.\n\n## Why\nIt fits.\n"
+    assert run("decide", parent, "Parent's own", body(text), "--root", root).code == 0
+    assert run("decide", child, "First try", body(text), "--root", root).code == 0
+    assert run("decide", child, "Second try", body(text), "--supersedes", "D001", "--settled",
+               "--root", root).code == 0
+    assert run("decide", child, "Separate call", body(text), "--root", root).code == 0
+    _cp(run, root, body, parent, PARENT_BODY)
+    _cp(run, root, body, child, CHILD_BODY)
+
+    template = run("merge", child, "--root", root)
+    assert f'- Decisions carried to {parent}: D002 "Second try", D003 "Separate call"' in template.out
+    result = run("merge", child, "--body", body(_merge_text(child)), "--root", root, "--json")
+    assert result.code == 0, result.err
+    assert json.loads(result.out)["decisions"] == ["D002", "D003"]
+
+    listed = run("decisions", parent, "--root", root).out
+    assert "D001 [working] Parent's own" in listed
+    assert "D002 [settled] Second try" in listed and f"from {child} D002" in listed
+    assert "D003 [working] Separate call" in listed and f"from {child} D003" in listed
+    assert "First try" not in listed
+    shown = run("decisions", parent, "D002", "--root", root).out
+    assert "Use A." in shown and f"from: {child}:D002" in shown
+    checkpoint_text = (store.resolve_thread(root, parent) / "checkpoints" / "c0002.md").read_text()
+    assert (f'- Decisions carried to {parent}: D002 "Second try" (now D002), '
+            f'D003 "Separate call" (now D003)') in checkpoint_text
 
 
 def test_merge_index_renders_pointers_as_arrows(root, run, body, loaded):
