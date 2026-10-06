@@ -821,11 +821,21 @@ def main(argv: list[str] | None = None) -> int:
     except ThreadError as exc:
         print(str(exc), file=sys.stderr)
         return exc.code
-    except FileNotFoundError as exc:
-        print(f"file not found: {exc.filename}", file=sys.stderr)
-        return 2
     except PermissionError as exc:
         print(f"permission denied: {exc.filename}", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        # Usually the text itself was passed where a file path belongs; a long
+        # text is too long to be a filename (ENAMETOOLONG), not just missing.
+        if exc.filename is None:
+            raise
+        name = str(exc.filename)
+        shown = name if len(name) <= 80 else name[:77] + "..."
+        print(
+            f"no such file: {shown}\n"
+            "Bodies and origins are read from a markdown file. Write the text to a file and pass its path.",
+            file=sys.stderr,
+        )
         return 2
     except UnicodeDecodeError as exc:
         # thread.yml and orientation.md handle this themselves; this is the

@@ -113,3 +113,11 @@ def test_text_above_the_first_heading_is_refused(make_thread, run, root, tmp_pat
     result = run("decide", identifier, "One folder", _file(tmp_path, "d.md", "Preamble.\n\n" + GOOD), "--root", root)
     assert result.code != 0 and "above the first heading" in result.err
     assert not list((store.resolve_thread(root, identifier) / "decisions").glob("D*.md"))
+
+
+def test_inline_text_where_a_file_belongs_is_a_clean_error(make_thread, run, root):
+    identifier = make_thread()
+    for text in ("## Decision\nshort", "## Decision\n" + "x" * 2000):
+        result = run("decide", identifier, "Inline", text, "--root", root)
+        assert result.code == 2
+        assert "pass its path" in result.err and "Traceback" not in result.err
