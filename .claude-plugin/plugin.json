@@ -1,5 +1,5 @@
 {
   "name": "spindle",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Threads: track ongoing work on disk so a new session can pick it up"
 }
