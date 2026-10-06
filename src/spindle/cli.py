@@ -812,8 +812,9 @@ def _task_order(argv: list[str]) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    given = sys.argv[1:] if argv is None else list(argv)
     try:
-        run(parser().parse_args(_task_order(sys.argv[1:] if argv is None else list(argv))))
+        run(parser().parse_args(_task_order(given)))
         return 0
     except NeedsInput as exc:
         print(str(exc), end="" if str(exc).endswith("\n") else "\n")
@@ -825,17 +826,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"permission denied: {exc.filename}", file=sys.stderr)
         return 2
     except OSError as exc:
-        # Usually the text itself was passed where a file path belongs; a long
-        # text is too long to be a filename (ENAMETOOLONG), not just missing.
         if exc.filename is None:
             raise
         name = str(exc.filename)
         shown = name if len(name) <= 80 else name[:77] + "..."
-        print(
-            f"no such file: {shown}\n"
-            "Bodies and origins are read from a markdown file. Write the text to a file and pass its path.",
-            file=sys.stderr,
-        )
+        if name in (str(arg) for arg in given):
+            # A file argument that can't be opened is usually the text itself passed
+            # where a path belongs; long text is too long to be a filename (ENAMETOOLONG).
+            print(
+                f"can't open {shown}\n"
+                "Bodies and origins are read from a markdown file. Write the text to a file and pass its path.",
+                file=sys.stderr,
+            )
+        else:
+            print(f"{exc.strerror}: {shown}", file=sys.stderr)
         return 2
     except UnicodeDecodeError as exc:
         # thread.yml and orientation.md handle this themselves; this is the
