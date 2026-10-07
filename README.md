@@ -65,3 +65,7 @@ The first of these that is set wins (src/spindle/identity.py):
 4. `user@host`.
 
 Supporting another runtime is one entry in `HOSTS` in identity.py.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

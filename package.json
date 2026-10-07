@@ -1,6 +1,7 @@
 {
   "name": "spindle",
   "version": "0.3.0",
+  "license": "MIT",
   "description": "Threads: track ongoing work on disk so a new session can pick it up",
   "private": true,
   "type": "module",
